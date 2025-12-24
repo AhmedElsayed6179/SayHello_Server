@@ -18,12 +18,16 @@ const corsOptions = {
 app.use(cors(corsOptions));
 
 // قم بمعالجة جميع preflight requests لأي مسار
-app.options('*', (req, res) => {
-  res.header('Access-Control-Allow-Origin', corsOptions.origin);
-  res.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type');
-  res.sendStatus(200);
-});
+app.use((req, res, next) => {
+  if (req.method === 'OPTIONS') {
+    res.header('Access-Control-Allow-Origin', corsOptions.origin);
+    res.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type');
+    res.sendStatus(200);
+  } else {
+    next();
+  }
+})
 
 // Route: start chat
 app.post('/start-chat', (req, res) => {
