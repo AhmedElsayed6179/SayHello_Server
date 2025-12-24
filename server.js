@@ -6,10 +6,18 @@ const cors = require('cors');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: '*', methods: ['GET', 'POST'], credentials: true } });
+const corsOptions = {
+  origin: 'https://sayhello-production-988b.up.railway.app',
+  methods: ['GET', 'POST', 'OPTIONS'],
+  credentials: true
+};
+
+app.use(cors(corsOptions));
+
+const io = new Server(server, { cors: corsOptions });
 
 app.use(express.json());
-app.use(cors({ origin: '*', credentials: true }));
+app.options('*', cors(corsOptions));
 
 const sessions = new Map();
 let waitingUser = null;
