@@ -14,8 +14,8 @@ const corsOptions = {
   credentials: true
 };
 
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // السماح لكل preflight requests
+app.use(cors(corsOptions));        // السماح بالـ CORS لكل الطلبات
+app.options('/start-chat', cors(corsOptions)); // السماح بالـ preflight فقط لمسار POST
 app.use(express.json());
 
 // إعداد Socket.IO مع نفس إعدادات CORS
