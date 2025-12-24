@@ -47,11 +47,11 @@ const io = new Server(server, { cors: corsOptions });
 
 async function broadcastRoomUsers() {
   try {
-    const clients = await io.in('main-room').allSockets(); // allSockets() ترجع Set
+    const clients = await io.in('main-room').allSockets();
     const count = clients.size;
-    io.to('main-room').emit('roomUsersCount', count);
+    io.in('main-room').emit('roomUsersCount', count);
   } catch (err) {
-    console.error('Error broadcasting users:', err);
+    console.error(err);
   }
 }
 
@@ -65,8 +65,8 @@ io.on('connection', socket => {
     socket.userName = name;
     sessions.delete(token);
 
-    socket.join('main-room');
-    await broadcastRoomUsers(); // <-- هنا
+    socket.join('main-room');   // ادخل الغرفة أولاً
+    await broadcastRoomUsers(); // ثم حدث العدد
 
     if (waitingUser && waitingUser.id !== socket.id) {
       const room = `room-${socket.id}-${waitingUser.id}`;
