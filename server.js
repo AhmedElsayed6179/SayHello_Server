@@ -46,11 +46,9 @@ app.post('/start-chat', (req, res) => {
 const io = new Server(server, { cors: corsOptions });
 
 function broadcastRoomUsers() {
-  for (const [room, clients] of io.sockets.adapter.rooms.entries()) {
-    if (!clients.has(room)) {
-      io.to(room).emit('roomUsersCount', clients.size);
-    }
-  }
+  const clients = io.sockets.adapter.rooms.get('main-room');
+  const count = clients ? clients.size : 0;
+  io.to('main-room').emit('roomUsersCount', count);
 }
 
 io.on('connection', socket => {
@@ -64,7 +62,7 @@ io.on('connection', socket => {
     sessions.delete(token);
 
     socket.join('main-room');
-    broadcastRoomUsers();
+    broadcastRoomUsers(); // <-- هنا
 
     if (waitingUser && waitingUser.id !== socket.id) {
       const room = `room-${socket.id}-${waitingUser.id}`;
@@ -92,7 +90,7 @@ io.on('connection', socket => {
       socket.to(socket.room).emit('partner_left');
       socket.leave(socket.room);
       socket.leave('main-room');
-      broadcastRoomUsers();
+      broadcastRoomUsers(); // <-- هنا
       socket.room = null;
     }
   });
@@ -101,7 +99,7 @@ io.on('connection', socket => {
     if (socket.room) {
       socket.to(socket.room).emit('partner_left');
       socket.leave('main-room');
-      broadcastRoomUsers();
+      broadcastRoomUsers(); // <-- هنا
     }
   });
 });
