@@ -7,35 +7,39 @@ const cors = require('cors');
 const app = express();
 const server = http.createServer(app);
 
+// إعدادات CORS
 const corsOptions = {
   origin: 'https://sayhello-production-988b.up.railway.app',
-  methods: ['GET','POST','OPTIONS'],
+  methods: ['GET', 'POST', 'OPTIONS'],
   credentials: true
 };
 
-// السماح لكل الطلبات بالـ CORS
+// السماح بالـ CORS لكل الطلبات
 app.use(cors(corsOptions));
 
-// السماح لكل preflight requests بطريقة صحيحة
+// السماح بطلبات preflight لـ /start-chat فقط
 app.options('/start-chat', cors(corsOptions));
 
 app.use(express.json());
 
-// إعداد Socket.IO مع نفس إعدادات CORS
+// Socket.IO مع نفس إعدادات CORS
 const io = new Server(server, { cors: corsOptions });
 
 const sessions = new Map();
 let waitingUser = null;
 
+// Route: start chat
 app.post('/start-chat', (req, res) => {
   const { name } = req.body;
-  if (!name || typeof name !== 'string' || name.trim().length < 3 || name.trim().length > 20) return res.status(400).json({ error: 'Invalid name' });
-
+  if (!name || typeof name !== 'string' || name.trim().length < 3 || name.trim().length > 20) {
+    return res.status(400).json({ error: 'Invalid name' });
+  }
   const token = crypto.randomUUID();
   sessions.set(token, name.trim());
   res.json({ token });
 });
 
+// Socket.IO logic
 io.on('connection', socket => {
   console.log('User connected:', socket.id);
 
@@ -72,7 +76,4 @@ io.on('connection', socket => {
 });
 
 const PORT = process.env.PORT || 3000;
-
-server.listen(PORT, () => {
-  console.log('Server running on port', PORT);
-});
+server.listen(PORT, () => console.log('Server running on port', PORT));
