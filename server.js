@@ -58,7 +58,7 @@ io.on('connection', socket => {
   socket.on('disconnect', () => { if(waitingUser && waitingUser.id===socket.id) waitingUser=null; if(socket.room) socket.to(socket.room).emit('partner_left'); });
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log('Server running on port', PORT);
