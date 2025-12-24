@@ -9,20 +9,20 @@ const server = http.createServer(app);
 
 const corsOptions = {
   origin: 'https://sayhello-production-988b.up.railway.app',
-  methods: ['GET','POST','OPTIONS'],
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type'],
   credentials: true
 };
 
-// السماح بالـ CORS لكل الطلبات
+// استخدم cors بشكل عام
 app.use(cors(corsOptions));
-app.use(express.json());
 
-// preflight request handler
-app.options('/start-chat', (req, res) => {
+// قم بمعالجة جميع preflight requests لأي مسار
+app.options('*', (req, res) => {
   res.header('Access-Control-Allow-Origin', corsOptions.origin);
-  res.header('Access-Control-Allow-Methods', 'POST,GET,OPTIONS');
+  res.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type');
-  res.sendStatus(200); // مهم جداً
+  res.sendStatus(200);
 });
 
 // Route: start chat
