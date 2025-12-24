@@ -45,16 +45,20 @@ app.post('/start-chat', (req, res) => {
 // إعداد Socket.IO
 const io = new Server(server, { cors: corsOptions });
 
-function broadcastRoomUsers() {
-  const clients = io.sockets.adapter.rooms.get('main-room');
-  const count = clients ? clients.size : 0;
-  io.to('main-room').emit('roomUsersCount', count);
+async function broadcastRoomUsers() {
+  try {
+    const clients = await io.in('main-room').allSockets(); // allSockets() ترجع Set
+    const count = clients.size;
+    io.to('main-room').emit('roomUsersCount', count);
+  } catch (err) {
+    console.error('Error broadcasting users:', err);
+  }
 }
 
 io.on('connection', socket => {
   console.log('User connected:', socket.id);
 
-  socket.on('join', token => {
+  socket.on('join', async token => {
     const name = sessions.get(token);
     if (!name) { socket.emit('error', 'Invalid token'); return socket.disconnect(); }
 
@@ -62,7 +66,7 @@ io.on('connection', socket => {
     sessions.delete(token);
 
     socket.join('main-room');
-    broadcastRoomUsers(); // <-- هنا
+    await broadcastRoomUsers(); // <-- هنا
 
     if (waitingUser && waitingUser.id !== socket.id) {
       const room = `room-${socket.id}-${waitingUser.id}`;
@@ -85,21 +89,21 @@ io.on('connection', socket => {
   });
 
   socket.on('typing', () => { if (socket.room) socket.to(socket.room).emit('typing'); });
-  socket.on('leave', () => {
+  socket.on('leave', async () => {
     if (socket.room) {
       socket.to(socket.room).emit('partner_left');
       socket.leave(socket.room);
       socket.leave('main-room');
-      broadcastRoomUsers(); // <-- هنا
+      await broadcastRoomUsers(); // <-- هنا
       socket.room = null;
     }
   });
-  socket.on('disconnect', () => {
+  socket.on('disconnect', async () => {
     if (waitingUser && waitingUser.id === socket.id) waitingUser = null;
     if (socket.room) {
       socket.to(socket.room).emit('partner_left');
       socket.leave('main-room');
-      broadcastRoomUsers(); // <-- هنا
+      await broadcastRoomUsers(); // <-- هنا
     }
   });
 });
