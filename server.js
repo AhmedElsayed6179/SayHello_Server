@@ -7,15 +7,18 @@ const cors = require('cors');
 const app = express();
 const server = http.createServer(app);
 
-// إعدادات CORS
 const corsOptions = {
-  origin: 'https://sayhello-production-988b.up.railway.app', // الدومين الخاص بالفرونت إند
-  methods: ['GET', 'POST', 'OPTIONS'],
+  origin: 'https://sayhello-production-988b.up.railway.app',
+  methods: ['GET','POST','OPTIONS'],
   credentials: true
 };
 
-app.use(cors(corsOptions));        // السماح بالـ CORS لكل الطلبات
-app.options('/start-chat', cors(corsOptions)); // السماح بالـ preflight فقط لمسار POST
+// السماح لكل الطلبات بالـ CORS
+app.use(cors(corsOptions));
+
+// السماح لكل preflight requests بطريقة صحيحة
+app.options('/start-chat', cors(corsOptions));
+
 app.use(express.json());
 
 // إعداد Socket.IO مع نفس إعدادات CORS
