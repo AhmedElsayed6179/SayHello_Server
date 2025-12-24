@@ -93,18 +93,19 @@ io.on('connection', socket => {
     if (socket.room) {
       socket.to(socket.room).emit('partner_left');
       socket.leave(socket.room);
-      socket.leave('main-room');
-      await broadcastRoomUsers(); // <-- هنا
       socket.room = null;
     }
+
+    socket.leave('main-room');
+    await broadcastRoomUsers(); // <-- هنا
   });
   socket.on('disconnect', async () => {
     if (waitingUser && waitingUser.id === socket.id) waitingUser = null;
     if (socket.room) {
       socket.to(socket.room).emit('partner_left');
-      socket.leave('main-room');
-      await broadcastRoomUsers(); // <-- هنا
     }
+    socket.leave('main-room');
+    await broadcastRoomUsers(); // <-- هنا
   });
 });
 
