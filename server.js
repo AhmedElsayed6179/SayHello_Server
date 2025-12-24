@@ -45,16 +45,6 @@ app.post('/start-chat', (req, res) => {
 // إعداد Socket.IO
 const io = new Server(server, { cors: corsOptions });
 
-async function broadcastRoomUsers() {
-  try {
-    const clients = await io.in('main-room').allSockets();
-    const count = clients.size;
-    io.in('main-room').emit('roomUsersCount', count);
-  } catch (err) {
-    console.error(err);
-  }
-}
-
 io.on('connection', socket => {
   console.log('User connected:', socket.id);
 
@@ -65,8 +55,12 @@ io.on('connection', socket => {
     socket.userName = name;
     sessions.delete(token);
 
-    socket.join('main-room');   // ادخل الغرفة أولاً
-    await broadcastRoomUsers(); // ثم حدث العدد
+    await socket.join('main-room');
+
+    // تحديث العدد بعد التأكد من دخول الغرفة
+    const clients = await io.in('main-room').allSockets();
+    const count = clients.size;
+    io.in('main-room').emit('roomUsersCount', count);
 
     if (waitingUser && waitingUser.id !== socket.id) {
       const room = `room-${socket.id}-${waitingUser.id}`;
