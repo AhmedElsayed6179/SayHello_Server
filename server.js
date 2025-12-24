@@ -6,10 +6,10 @@ const cors = require('cors');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: 'http://sayhello-production-988b.up.railway.app', methods:['GET','POST'], credentials:true }});
+const io = new Server(server, { cors: { origin: 'https://sayhello-production-988b.up.railway.app', methods:['GET','POST'], credentials:true }});
 
 app.use(express.json());
-app.use(cors({ origin: 'http://sayhello-production-988b.up.railway.app', credentials: true }));
+app.use(cors({ origin: 'https://sayhello-production-988b.up.railway.app', credentials: true }));
 
 const sessions = new Map();
 let waitingUser = null;
