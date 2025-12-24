@@ -6,10 +6,10 @@ const cors = require('cors');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: 'http://localhost:4200', methods:['GET','POST'], credentials:true }});
+const io = new Server(server, { cors: { origin: 'http://sayhello-production-988b.up.railway.app', methods:['GET','POST'], credentials:true }});
 
 app.use(express.json());
-app.use(cors({ origin: 'http://localhost:4200', credentials: true }));
+app.use(cors({ origin: 'http://sayhello-production-988b.up.railway.app', credentials: true }));
 
 const sessions = new Map();
 let waitingUser = null;
@@ -58,4 +58,8 @@ io.on('connection', socket => {
   socket.on('disconnect', () => { if(waitingUser && waitingUser.id===socket.id) waitingUser=null; if(socket.room) socket.to(socket.room).emit('partner_left'); });
 });
 
-server.listen(3000, ()=>console.log('Server running on port 3000'));
+const PORT = process.env.PORT || 3000;
+
+server.listen(PORT, '0.0.0.0', () => {
+  console.log('Server running on port', PORT);
+});
