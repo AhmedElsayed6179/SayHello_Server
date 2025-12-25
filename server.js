@@ -44,10 +44,12 @@ app.post('/start-chat', (req, res) => {
 const io = new Server(server, { cors: corsOptions });
 
 function emitUserCount(room) {
+  if (!room) return;
   const clients = io.sockets.adapter.rooms.get(room);
   const count = clients ? clients.size : 0;
   io.to(room).emit('user_count', count);
 }
+
 
 io.on('connection', socket => {
   console.log('User connected:', socket.id);
@@ -67,7 +69,7 @@ io.on('connection', socket => {
       socket.room = room;
       waitingUser.room = room;
       io.to(room).emit('connected');
-      emitUserCount(room);
+      emitUserCount(room); // إرسال العدد بعد الانضمام
       waitingUser = null;
     } else {
       waitingUser = socket;
@@ -90,18 +92,20 @@ io.on('connection', socket => {
 
   socket.on('leave', async () => {
     if (socket.room) {
+      const room = socket.room; // احفظ الغرفة قبل الغياب
       socket.to(socket.room).emit('partner_left');
       socket.leave(socket.room);
       socket.room = null;
-      emitUserCount(socket.room); // تحديث العدد بعد خروج الشخص
+      emitUserCount(room); // إرسال العدد قبل مسح الغرفة
     }
   });
 
   socket.on('disconnect', async () => {
     if (waitingUser && waitingUser.id === socket.id) waitingUser = null;
     if (socket.room) {
-      socket.to(socket.room).emit('partner_left');
-      emitUserCount(socket.room); // تحديث العدد بعد خروج الشخص
+      const room = socket.room;
+      socket.to(room).emit('partner_left');
+      emitUserCount(room);
     }
   });
 });
