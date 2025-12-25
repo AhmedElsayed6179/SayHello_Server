@@ -89,14 +89,10 @@ io.on('connection', socket => {
 
   socket.on('leave', async () => {
     if (socket.room) {
-      const room = socket.room; // احفظ الغرفة قبل الغياب
       socket.to(socket.room).emit('partner_left');
       socket.leave(socket.room);
       socket.room = null;
     }
-
-    connectedUsers--;
-    io.emit('user_count', connectedUsers);
   });
 
   socket.on('disconnect', async () => {
@@ -106,8 +102,8 @@ io.on('connection', socket => {
       socket.to(room).emit('partner_left');
     }
 
-    connectedUsers--; // نقص العدد
-    io.emit('user_count', connectedUsers); // أرسل للجميع
+    if (connectedUsers > 0) connectedUsers--;
+    io.emit('user_count', connectedUsers);
   });
 });
 
