@@ -43,17 +43,6 @@ app.post('/start-chat', (req, res) => {
 // إعداد Socket.IO
 const io = new Server(server, { cors: corsOptions });
 
-// دالة لتحديث عدد المستخدمين في main-room
-async function broadcastRoomUsers() {
-  try {
-    const clients = await io.in('main-room').allSockets();
-    const count = clients.size;
-    io.in('main-room').emit('roomUsersCount', count);
-  } catch (err) {
-    console.error('Error broadcasting users:', err);
-  }
-}
-
 io.on('connection', socket => {
   console.log('User connected:', socket.id);
 
@@ -63,11 +52,6 @@ io.on('connection', socket => {
 
     socket.userName = name;
     sessions.delete(token);
-
-    // الانضمام لغرفة main-room أولاً
-    await socket.join('main-room');
-    console.log('Joined main-room, socket id:', socket.id);
-    await broadcastRoomUsers(); // تحديث العدد فور دخول المستخدم
 
     // غرف الدردشة الثنائية
     if (waitingUser && waitingUser.id !== socket.id) {
@@ -103,15 +87,11 @@ io.on('connection', socket => {
       socket.leave(socket.room);
       socket.room = null;
     }
-    socket.leave('main-room');
-    await broadcastRoomUsers();
   });
 
   socket.on('disconnect', async () => {
     if (waitingUser && waitingUser.id === socket.id) waitingUser = null;
     if (socket.room) socket.to(socket.room).emit('partner_left');
-    socket.leave('main-room');
-    await broadcastRoomUsers();
   });
 });
 
