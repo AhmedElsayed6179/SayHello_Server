@@ -8,6 +8,7 @@ const server = http.createServer(app);
 
 const sessions = new Map();
 let waitingUser = null;
+let connectedUsers = 0;
 
 // إعدادات CORS
 const allowedOrigin = 'https://sayhello-production-988b.up.railway.app';
@@ -43,16 +44,10 @@ app.post('/start-chat', (req, res) => {
 // إعداد Socket.IO
 const io = new Server(server, { cors: corsOptions });
 
-function emitUserCount(room) {
-  if (!room) return;
-  const clients = io.sockets.adapter.rooms.get(room);
-  const count = clients ? clients.size : 0;
-  io.to(room).emit('user_count', count);
-}
-
-
 io.on('connection', socket => {
   console.log('User connected:', socket.id);
+
+  socket.emit('user_count', connectedUsers);
 
   socket.on('join', async token => {
     const name = sessions.get(token);
@@ -60,6 +55,9 @@ io.on('connection', socket => {
 
     socket.userName = name;
     sessions.delete(token);
+
+    connectedUsers++;
+    io.emit('user_count', connectedUsers);
 
     // غرف الدردشة الثنائية
     if (waitingUser && waitingUser.id !== socket.id) {
@@ -69,7 +67,6 @@ io.on('connection', socket => {
       socket.room = room;
       waitingUser.room = room;
       io.to(room).emit('connected');
-      emitUserCount(room); // إرسال العدد بعد الانضمام
       waitingUser = null;
     } else {
       waitingUser = socket;
@@ -96,8 +93,10 @@ io.on('connection', socket => {
       socket.to(socket.room).emit('partner_left');
       socket.leave(socket.room);
       socket.room = null;
-      emitUserCount(room); // إرسال العدد قبل مسح الغرفة
     }
+
+    connectedUsers--;
+    io.emit('user_count', connectedUsers);
   });
 
   socket.on('disconnect', async () => {
@@ -105,8 +104,10 @@ io.on('connection', socket => {
     if (socket.room) {
       const room = socket.room;
       socket.to(room).emit('partner_left');
-      emitUserCount(room);
     }
+
+    connectedUsers--; // نقص العدد
+    io.emit('user_count', connectedUsers); // أرسل للجميع
   });
 });
 
