@@ -66,6 +66,7 @@ io.on('connection', socket => {
 
     // الانضمام لغرفة main-room أولاً
     await socket.join('main-room');
+    console.log('Joined main-room, socket id:', socket.id);
     await broadcastRoomUsers(); // تحديث العدد فور دخول المستخدم
 
     // غرف الدردشة الثنائية
