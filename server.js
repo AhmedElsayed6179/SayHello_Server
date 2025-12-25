@@ -47,7 +47,8 @@ const io = new Server(server, { cors: corsOptions });
 io.on('connection', socket => {
   console.log('User connected:', socket.id);
 
-  socket.emit('user_count', connectedUsers);
+  connectedUsers++;
+  io.emit('user_count', connectedUsers);
 
   socket.on('join', async token => {
     const name = sessions.get(token);
@@ -55,9 +56,6 @@ io.on('connection', socket => {
 
     socket.userName = name;
     sessions.delete(token);
-
-    connectedUsers++;
-    io.emit('user_count', connectedUsers);
 
     // غرف الدردشة الثنائية
     if (waitingUser && waitingUser.id !== socket.id) {
@@ -93,6 +91,9 @@ io.on('connection', socket => {
       socket.leave(socket.room);
       socket.room = null;
     }
+
+    if (connectedUsers > 0) connectedUsers--;
+    io.emit('user_count', connectedUsers);
   });
 
   socket.on('disconnect', async () => {
