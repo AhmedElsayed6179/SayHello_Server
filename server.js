@@ -44,6 +44,18 @@ app.post('/start-chat', (req, res) => {
 // إعداد Socket.IO
 const io = new Server(server, { cors: corsOptions });
 
+function decreaseUserCount(socket) {
+  if (waitingUser && waitingUser.id === socket.id) {
+    waitingUser = null;
+  }
+
+  if (socket.counted) {
+    connectedUsers--;
+    socket.counted = false;
+    io.emit('user_count', connectedUsers);
+  }
+}
+
 io.on('connection', socket => {
   console.log('User connected:', socket.id);
 
@@ -58,6 +70,7 @@ io.on('connection', socket => {
     sessions.delete(token);
 
     // فقط عند انضمام المستخدم الفعلي
+    socket.counted = true; // فلاغ جديد
     connectedUsers++;
     io.emit('user_count', connectedUsers);
 
@@ -96,8 +109,7 @@ io.on('connection', socket => {
       socket.room = null;
     }
 
-    if (connectedUsers > 0) connectedUsers--;
-    io.emit('user_count', connectedUsers);
+    decreaseUserCount(socket);
   });
 
   socket.on('disconnect', async () => {
@@ -107,8 +119,7 @@ io.on('connection', socket => {
       socket.to(room).emit('partner_left');
     }
 
-    if (connectedUsers > 0) connectedUsers--;
-    io.emit('user_count', connectedUsers);
+    decreaseUserCount(socket);
   });
 });
 
