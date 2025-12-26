@@ -130,15 +130,16 @@ io.on('connection', socket => {
   });
 
   socket.on('startRecording', () => {
-    if (socket.room) {
-      socket.to(socket.room).emit('partnerRecording', true);
-    }
+    if (!socket.room) return;
+
+    // 🔴 ابعت كل مرة بدون استثناء
+    socket.to(socket.room).emit('partnerRecording', true);
   });
 
   socket.on('stopRecording', () => {
-    if (socket.room) {
-      socket.to(socket.room).emit('partnerRecording', false);
-    }
+    if (!socket.room) return;
+
+    socket.to(socket.room).emit('partnerRecording', false);
   });
 
   socket.on('leave', async () => {
