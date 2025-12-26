@@ -2,6 +2,9 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const crypto = require('crypto');
+const multer = require('multer');
+const path = require('path');
+
 
 const app = express();
 const server = http.createServer(app);
@@ -29,6 +32,23 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json());
+
+const storage = multer.diskStorage({
+  destination: 'uploads/',
+  filename: (req, file, cb) => {
+    cb(null, crypto.randomUUID() + '.webm');
+  }
+});
+
+const upload = multer({ storage });
+
+app.post('/upload-voice', upload.single('voice'), (req, res) => {
+  res.json({
+    url: `${allowedOrigin}/uploads/${req.file.filename}`
+  });
+});
+
+app.use('/uploads', express.static('uploads'));
 
 // إنشاء توكن للمستخدم
 app.post('/start-chat', (req, res) => {
@@ -86,6 +106,16 @@ io.on('connection', socket => {
     } else {
       waitingUser = socket;
       socket.emit('waiting');
+    }
+  });
+
+  socket.on('sendVoice', data => {
+    if (socket.room) {
+      io.to(socket.room).emit('newVoice', {
+        sender: socket.userName,
+        url: data.url,
+        time: new Date().toISOString()
+      });
     }
   });
 
