@@ -129,6 +129,18 @@ io.on('connection', socket => {
     if (socket.room) socket.to(socket.room).emit('typing');
   });
 
+  socket.on('startRecording', () => {
+    if (socket.room) {
+      socket.to(socket.room).emit('partnerRecording', { recording: true });
+    }
+  });
+
+  socket.on('stopRecording', () => {
+    if (socket.room) {
+      socket.to(socket.room).emit('partnerRecording', { recording: false });
+    }
+  });
+
   socket.on('leave', async () => {
     if (socket.room) {
       socket.to(socket.room).emit('partner_left');
