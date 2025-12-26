@@ -43,9 +43,8 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 app.post('/upload-voice', upload.single('voice'), (req, res) => {
-  res.json({
-    url: `${allowedOrigin}/uploads/${req.file.filename}`
-  });
+  const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+  res.json({ url: fileUrl });
 });
 
 app.use('/uploads', express.static('uploads'));
