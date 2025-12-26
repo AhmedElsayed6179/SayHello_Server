@@ -131,13 +131,13 @@ io.on('connection', socket => {
 
   socket.on('startRecording', () => {
     if (socket.room) {
-      socket.to(socket.room).emit('partnerRecording', { recording: true });
+      socket.to(socket.room).emit('partnerRecording', true);
     }
   });
 
   socket.on('stopRecording', () => {
     if (socket.room) {
-      socket.to(socket.room).emit('partnerRecording', { recording: false });
+      socket.to(socket.room).emit('partnerRecording', false);
     }
   });
 
