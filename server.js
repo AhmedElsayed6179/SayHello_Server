@@ -119,13 +119,40 @@ io.on('connection', socket => {
   });
 
   socket.on('react', data => {
+    if (!socket.room || !data.messageId) return;
+
+    const { messageId, reaction } = data;
+    const user = socket.userName;
+
+    // لازم تكون مخزّن الرسائل في السيرفر
+    const msg = messages.find(m => m.id === messageId);
+    if (!msg) return;
+
+    if (!msg.reactions) msg.reactions = {};
+
+    if (!msg.reactions[reaction]) {
+      msg.reactions[reaction] = [];
+    }
+
+    const index = msg.reactions[reaction].indexOf(user);
+
+    if (index === -1) {
+      // ➕ إضافة reaction
+      msg.reactions[reaction].push(user);
+    } else {
+      // ➖ إزالة reaction (toggle)
+      msg.reactions[reaction].splice(index, 1);
+
+      if (msg.reactions[reaction].length === 0) {
+        delete msg.reactions[reaction];
+      }
+    }
+
     io.to(socket.room).emit('newReaction', {
-      messageId: data.messageId,
-      reaction: data.reaction,
-      sender: socket.userName
+      messageId,
+      reactions: msg.reactions
     });
   });
-
 
   socket.on('sendMessage', msg => {
     if (socket.room && msg.id && msg.text) {  // ← لازم يتأكد من وجود ID
