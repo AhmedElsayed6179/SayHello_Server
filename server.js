@@ -124,7 +124,7 @@ io.on('connection', socket => {
     io.to(socket.room).emit('newReaction', {
       messageId: data.messageId,
       reaction: data.reaction,
-      sender: socket.id
+      sender: socket.userName
     });
   });
 
