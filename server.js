@@ -10,6 +10,7 @@ const server = http.createServer(app);
 const sessions = new Map();
 let waitingUser = null;
 let connectedUsers = 0;
+const messages = [];
 
 // إعدادات CORS
 const allowedOrigin = 'https://sayhello-production-988b.up.railway.app';
@@ -106,15 +107,32 @@ io.on('connection', socket => {
     }
   });
 
+  socket.on('sendMessage', msg => {
+    if (socket.room && msg.id && msg.text) {
+      const chatMsg = {
+        id: msg.id,
+        sender: socket.userName,
+        text: msg.text,
+        time: new Date().toISOString(),
+        reactions: {}
+      };
+      messages.push(chatMsg);
+      io.to(socket.room).emit('newMessage', chatMsg);
+    }
+  });
+
   socket.on('sendVoice', data => {
     if (socket.room && data.id) {
-      io.to(socket.room).emit('newVoice', {
+      const chatMsg = {
         id: data.id,
         sender: socket.userName,
         url: data.url,
         duration: data.duration,
-        time: new Date().toISOString()
-      });
+        time: new Date().toISOString(),
+        reactions: {}
+      };
+      messages.push(chatMsg);
+      io.to(socket.room).emit('newVoice', chatMsg);
     }
   });
 
@@ -131,34 +149,18 @@ io.on('connection', socket => {
     const idx = msg.reactions[reaction].indexOf(sender);
 
     if (idx === -1) {
-      // إضافة reaction
       msg.reactions[reaction].push(sender);
     } else {
-      // إزالة reaction (toggle)
       msg.reactions[reaction].splice(idx, 1);
       if (msg.reactions[reaction].length === 0) {
         delete msg.reactions[reaction];
       }
     }
 
-    // إرسال النتيجة لكل المستخدمين في الغرفة
     io.to(socket.room).emit('newReaction', {
       messageId,
       reactions: msg.reactions
     });
-  });
-
-  socket.on('sendMessage', msg => {
-    if (socket.room && msg.id && msg.text) {  // ← لازم يتأكد من وجود ID
-      io.to(socket.room).emit('newMessage', {
-        id: msg.id,          // ← مهم جدًا
-        sender: socket.userName,
-        text: msg.text,
-        time: new Date().toISOString()
-      });
-    } else {
-      socket.emit('waiting');
-    }
   });
 
   socket.on('typing', () => {
