@@ -117,13 +117,16 @@ io.on('connection', socket => {
     }
   });
 
-  socket.on('react', data => {
-    if (socket.room) {
-      io.to(socket.room).emit('newReaction', {
-        messageId: data.messageId,
-        reaction: data.reaction,
-        from: socket.userName
+  socket.on('sendMessage', msg => {
+    if (socket.room && msg.id && msg.text) {  // ← لازم يتأكد من وجود ID
+      io.to(socket.room).emit('newMessage', {
+        id: msg.id,          // ← مهم جدًا
+        sender: socket.userName,
+        text: msg.text,
+        time: new Date().toISOString()
       });
+    } else {
+      socket.emit('waiting');
     }
   });
 
