@@ -127,14 +127,6 @@ io.on('connection', socket => {
     }
   });
 
-  this.socket.on('newReaction', data => {
-    const msg = this.messages.find(m => m.id === data.messageId);
-    if (msg) {
-      msg.reaction = data.reaction;
-      this.cd.detectChanges();
-    }
-  });
-
   socket.on('sendMessage', msg => {
     if (typeof msg !== 'string' || !msg.trim()) return;
     if (socket.room) {
