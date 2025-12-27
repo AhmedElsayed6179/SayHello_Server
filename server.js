@@ -109,6 +109,7 @@ io.on('connection', socket => {
   socket.on('sendVoice', data => {
     if (socket.room) {
       io.to(socket.room).emit('newVoice', {
+        id: msg.id,          // ← مهم جدًا
         sender: socket.userName,
         url: data.url,
         duration: data.duration,
@@ -125,15 +126,6 @@ io.on('connection', socket => {
         text: msg.text,
         time: new Date().toISOString()
       });
-    } else {
-      socket.emit('waiting');
-    }
-  });
-
-  socket.on('sendMessage', msg => {
-    if (typeof msg !== 'string' || !msg.trim()) return;
-    if (socket.room) {
-      io.to(socket.room).emit('newMessage', { sender: socket.userName, text: msg.trim(), time: new Date().toISOString() });
     } else {
       socket.emit('waiting');
     }
