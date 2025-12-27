@@ -107,9 +107,9 @@ io.on('connection', socket => {
   });
 
   socket.on('sendVoice', data => {
-    if (socket.room) {
+    if (socket.room && data.id) {
       io.to(socket.room).emit('newVoice', {
-        id: msg.id,          // ← مهم جدًا
+        id: data.id,
         sender: socket.userName,
         url: data.url,
         duration: data.duration,
