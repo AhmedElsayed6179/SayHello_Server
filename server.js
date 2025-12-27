@@ -111,6 +111,7 @@ io.on('connection', socket => {
       io.to(socket.room).emit('newVoice', {
         sender: socket.userName,
         url: data.url,
+        duration: data.duration,
         time: new Date().toISOString()
       });
     }
