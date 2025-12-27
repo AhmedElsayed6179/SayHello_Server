@@ -154,6 +154,14 @@ io.on('connection', socket => {
     });
   });
 
+  this.socket.on('newReaction', data => {
+    const msg = this.messages.find(m => m.id === data.messageId);
+    if (!msg) return;
+
+    msg.reactions = data.reactions;
+    this.cd.detectChanges();
+  });
+
   socket.on('sendMessage', msg => {
     if (socket.room && msg.id && msg.text) {  // ← لازم يتأكد من وجود ID
       io.to(socket.room).emit('newMessage', {
