@@ -119,14 +119,13 @@ io.on('connection', socket => {
   });
 
   socket.on('react', data => {
-    if (!socket.room || !data.messageId) return;
-
     io.to(socket.room).emit('newReaction', {
       messageId: data.messageId,
       reaction: data.reaction,
       sender: socket.userName
     });
   });
+
 
   socket.on('sendMessage', msg => {
     if (socket.room && msg.id && msg.text) {  // ← لازم يتأكد من وجود ID
