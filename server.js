@@ -121,33 +121,27 @@ io.on('connection', socket => {
   socket.on('react', data => {
     if (!socket.room || !data.messageId) return;
 
-    const { messageId, reaction } = data;
-    const user = socket.userName;
-
-    // لازم تكون مخزّن الرسائل في السيرفر
+    const { messageId, reaction, sender } = data;
     const msg = messages.find(m => m.id === messageId);
     if (!msg) return;
 
     if (!msg.reactions) msg.reactions = {};
+    if (!msg.reactions[reaction]) msg.reactions[reaction] = [];
 
-    if (!msg.reactions[reaction]) {
-      msg.reactions[reaction] = [];
-    }
+    const idx = msg.reactions[reaction].indexOf(sender);
 
-    const index = msg.reactions[reaction].indexOf(user);
-
-    if (index === -1) {
-      // ➕ إضافة reaction
-      msg.reactions[reaction].push(user);
+    if (idx === -1) {
+      // إضافة reaction
+      msg.reactions[reaction].push(sender);
     } else {
-      // ➖ إزالة reaction (toggle)
-      msg.reactions[reaction].splice(index, 1);
-
+      // إزالة reaction (toggle)
+      msg.reactions[reaction].splice(idx, 1);
       if (msg.reactions[reaction].length === 0) {
         delete msg.reactions[reaction];
       }
     }
 
+    // إرسال النتيجة لكل المستخدمين في الغرفة
     io.to(socket.room).emit('newReaction', {
       messageId,
       reactions: msg.reactions
