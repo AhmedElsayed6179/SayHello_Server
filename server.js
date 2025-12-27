@@ -118,6 +118,16 @@ io.on('connection', socket => {
     }
   });
 
+  socket.on('react', data => {
+    if (!socket.room || !data.messageId) return;
+
+    io.to(socket.room).emit('newReaction', {
+      messageId: data.messageId,
+      reaction: data.reaction,
+      sender: socket.id
+    });
+  });
+
   socket.on('sendMessage', msg => {
     if (socket.room && msg.id && msg.text) {  // ← لازم يتأكد من وجود ID
       io.to(socket.room).emit('newMessage', {
@@ -138,7 +148,6 @@ io.on('connection', socket => {
   socket.on('startRecording', () => {
     if (!socket.room) return;
 
-    // 🔴 ابعت كل مرة بدون استثناء
     socket.to(socket.room).emit('partnerRecording', true);
   });
 
