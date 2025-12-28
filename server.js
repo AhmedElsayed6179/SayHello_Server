@@ -100,7 +100,7 @@ io.on('connection', socket => {
     io.emit('user_count', connectedUsers);
 
     // غرف الدردشة الثنائية
-    if (waitingUser && waitingUser.deviceId !== socket.deviceId) {
+    if (waitingUser) {
       const room = `room-${socket.id}-${waitingUser.id}`;
       socket.join(room);
       waitingUser.join(room);
