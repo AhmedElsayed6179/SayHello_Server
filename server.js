@@ -116,7 +116,7 @@ io.on('connection', socket => {
       const chatMsg = {
         id: msg.id,
         senderId: socket.userId,
-        senderName: socket.userName,
+        senderName: socket.userName, // ← صح هنا
         text: msg.text,
         time: new Date().toISOString(),
         reactions: {}
@@ -131,7 +131,7 @@ io.on('connection', socket => {
       const chatMsg = {
         id: data.id,
         senderId: socket.userId,
-        senderName: socket.userName,
+        senderName: socket.userName, // ← هنا مهم
         url: data.url,
         duration: data.duration,
         time: new Date().toISOString(),
