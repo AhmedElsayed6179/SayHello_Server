@@ -87,6 +87,7 @@ io.on('connection', socket => {
     const name = sessions.get(token);
     if (!name) { socket.emit('error', 'Invalid token'); return socket.disconnect(); }
 
+    socket.userId = socket.id;
     socket.userName = name;
     sessions.delete(token);
 
