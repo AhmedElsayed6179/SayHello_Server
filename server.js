@@ -9,7 +9,7 @@ const app = express();
 app.set('trust proxy', true);
 const server = http.createServer(app);
 
-const sessions = new Map(); // كل token مرتبط بجلسة معينة
+const sessions = new Map(); // كل token مرتبط بجلسة
 let waitingUsers = [];
 let connectedUsers = 0;
 const messages = [];
@@ -21,7 +21,7 @@ const corsOptions = {
   credentials: true
 };
 
-// CORS Middleware
+// Middleware CORS
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', allowedOrigin);
   res.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
@@ -72,8 +72,8 @@ io.on('connection', socket => {
       return socket.disconnect();
     }
 
-    socket.userName = name; // للعرض فقط
-    sessions.delete(token); // كل token يُستخدم مرة واحدة
+    socket.userName = name;
+    sessions.delete(token);
 
     socket.counted = true;
     connectedUsers++;
@@ -81,12 +81,12 @@ io.on('connection', socket => {
 
     waitingUsers.push(socket);
 
-    // pairing
+    // ربط أي اثنين أول ما يكونوا جاهزين
     if (waitingUsers.length >= 2) {
       const user1 = waitingUsers.shift();
       const user2 = waitingUsers.shift();
 
-      const room = `room-${user1.id}-${user2.id}`;
+      const room = `room-${crypto.randomUUID()}`; // room فريد دائمًا
       user1.join(room);
       user2.join(room);
       user1.room = room;
