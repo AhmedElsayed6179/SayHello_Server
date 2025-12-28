@@ -66,7 +66,10 @@ app.post('/start-chat', (req, res) => {
 const io = new Server(server, { cors: corsOptions });
 
 function decreaseUserCount(socket) {
-  if (waitingUser && waitingUser.id === socket.id) waitingUser = null;
+  if (waitingUser && waitingUser.id === socket.id) {
+    waitingUser = null;
+  }
+
   if (socket.counted) {
     connectedUsers--;
     socket.counted = false;
@@ -109,16 +112,10 @@ io.on('connection', socket => {
   });
 
   socket.on('sendMessage', msg => {
-    if (!socket.room) {
-      socket.emit('error', 'No partner connected yet.');
-      return;
-    }
-
-    if (msg.id && msg.text) {
+    if (socket.room && msg.id && msg.text) {
       const chatMsg = {
         id: msg.id,
-        senderId: socket.userId,
-        senderName: socket.userName,
+        sender: socket.userName,
         text: msg.text,
         time: new Date().toISOString(),
         reactions: {}
@@ -129,15 +126,10 @@ io.on('connection', socket => {
   });
 
   socket.on('sendVoice', data => {
-    if (!socket.room) {
-      socket.emit('error', 'No partner connected yet.');
-      return;
-    }
-    if (data.id) {
+    if (socket.room && data.id) {
       const chatMsg = {
         id: data.id,
-        senderId: socket.userId,
-        senderName: socket.userName,
+        sender: socket.userName,
         url: data.url,
         duration: data.duration,
         time: new Date().toISOString(),
@@ -201,9 +193,13 @@ io.on('connection', socket => {
     decreaseUserCount(socket);
   });
 
-  socket.on('disconnect', () => {
+  socket.on('disconnect', async () => {
     if (waitingUser && waitingUser.id === socket.id) waitingUser = null;
-    if (socket.room) socket.to(socket.room).emit('partner_left');
+    if (socket.room) {
+      const room = socket.room;
+      socket.to(room).emit('partner_left');
+    }
+
     decreaseUserCount(socket);
   });
 });
