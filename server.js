@@ -93,10 +93,10 @@ io.on('connection', socket => {
   });
 
   socket.on('sendMessage', msg => {
-    if (socket.room && msg.id && msg.text) {
+    if (socket.room && msg.id && msg.text && msg.senderName) {
       const chatMsg = {
         id: msg.id,
-        sender: socket.userName,
+        sender: msg.senderName, // الاسم الحقيقي للآخرين
         text: msg.text,
         time: new Date().toISOString(),
         reactions: {}
