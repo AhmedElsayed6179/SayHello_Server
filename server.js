@@ -9,12 +9,13 @@ const app = express();
 app.set('trust proxy', true);
 const server = http.createServer(app);
 
-const sessions = new Map();
+const sessions = new Map(); // token -> displayName
 let waitingUsers = [];
 let connectedUsers = 0;
 const messages = [];
 
 const allowedOrigin = 'https://sayhello-production-988b.up.railway.app';
+
 const corsOptions = {
   origin: allowedOrigin,
   methods: ['GET', 'POST', 'OPTIONS'],
@@ -31,7 +32,7 @@ app.use((req, res, next) => {
 });
 app.use(express.json());
 
-// Multer للرفع
+// إعداد Multer للرفع
 const storage = multer.diskStorage({
   destination: 'uploads/',
   filename: (req, file, cb) => {
@@ -47,13 +48,16 @@ app.post('/upload-voice', upload.single('voice'), (req, res) => {
 
 app.use('/uploads', express.static('uploads'));
 
+// إنشاء جلسة جديدة بدون الاعتماد على الاسم المتكرر
 app.post('/start-chat', (req, res) => {
   const { name } = req.body;
   if (!name || typeof name !== 'string' || name.trim().length < 3 || name.trim().length > 20) {
     return res.status(400).json({ error: 'Invalid name' });
   }
+  // توليد اسم عرض فريد لكل جلسة
+  const displayName = `${name.trim()}-${Math.floor(Math.random() * 10000)}`;
   const token = crypto.randomUUID();
-  sessions.set(token, name.trim());
+  sessions.set(token, displayName);
   res.json({ token });
 });
 
@@ -99,8 +103,8 @@ io.on('connection', socket => {
     if (socket.room && msg.id && msg.text) {
       const chatMsg = {
         id: msg.id,
-        senderId: socket.id,      // ← فريد لكل اتصال
-        sender: socket.userName,
+        senderId: socket.id,
+        sender: socket.userName, 
         text: msg.text,
         time: new Date().toISOString(),
         reactions: {}
@@ -115,7 +119,7 @@ io.on('connection', socket => {
     if (socket.room && data.id) {
       const chatMsg = {
         id: data.id,
-        senderId: socket.id,      // ← فريد لكل اتصال
+        senderId: socket.id,
         sender: socket.userName,
         url: data.url,
         duration: data.duration,
@@ -130,7 +134,6 @@ io.on('connection', socket => {
   // الإيموشن
   socket.on('react', data => {
     if (!socket.room || !data.messageId) return;
-
     const { messageId, reaction, sender } = data;
     const msg = messages.find(m => m.id === messageId);
     if (!msg) return;
