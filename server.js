@@ -55,7 +55,9 @@ app.post('/start-chat', (req, res) => {
     return res.status(400).json({ error: 'Invalid name' });
   }
   // توليد اسم عرض فريد لكل جلسة
-  const displayName = `${name.trim()} (\u200B${crypto.randomUUID().slice(0, 8)})`;
+  const hiddenId = crypto.randomUUID().slice(0, 8); // معرف داخلي فقط
+  const displayName = `(${name.trim()})`; // الاسم المعروض بين قوسين
+  socket.internalId = hiddenId; // للاستخدام الداخلي فقط
   const token = crypto.randomUUID();
   sessions.set(token, displayName);
   res.json({ token });
