@@ -9,11 +9,11 @@ const app = express();
 app.set('trust proxy', true);
 const server = http.createServer(app);
 
-const sessions = new Map(); // تخزين الاسم مقابل التوكن
+const sessions = new Map(); // token -> name
 let waitingUsers = [];
 let connectedUsers = 0;
 
-// النطاق المسموح به (عدله حسب رابط الفرونت إند الخاص بك)
+// عدل هذا الرابط برابط الفرونت إند الخاص بك
 const allowedOrigin = 'https://sayhello-production-988b.up.railway.app';
 const corsOptions = {
   origin: allowedOrigin,
@@ -21,7 +21,6 @@ const corsOptions = {
   credentials: true
 };
 
-// Middleware CORS
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', allowedOrigin);
   res.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
@@ -34,7 +33,6 @@ app.use((req, res, next) => {
 app.use(express.json());
 app.use('/uploads', express.static('uploads'));
 
-// إعداد رفع الملفات الصوتية
 const storage = multer.diskStorage({
   destination: 'uploads/',
   filename: (req, file, cb) => {
@@ -49,7 +47,6 @@ app.post('/upload-voice', upload.single('voice'), (req, res) => {
   res.json({ url: fileUrl });
 });
 
-// بدء المحادثة وتخزين الاسم
 app.post('/start-chat', (req, res) => {
   const { name } = req.body;
   if (!name || typeof name !== 'string' || name.trim().length < 3) {
@@ -60,26 +57,21 @@ app.post('/start-chat', (req, res) => {
   res.json({ token });
 });
 
-// Socket.IO Logic
 const io = new Server(server, { cors: corsOptions });
 
 io.on('connection', socket => {
-  // إرسال عدد المتصلين فور الاتصال
   socket.emit('user_count', connectedUsers);
 
   socket.on('join', token => {
     const name = sessions.get(token);
-    
     if (!name) {
       socket.emit('error', 'Invalid token');
-      return; // لا تفصل الاتصال فوراً، فقط أرسل خطأ
+      return; 
     }
 
-    // حفظ بيانات المستخدم في السوكيت
     socket.userName = name;
-    sessions.delete(token); // حذف التوكن لعدم استخدامه مرة أخرى
+    sessions.delete(token);
 
-    // تحديث العداد
     if (!socket.counted) {
       socket.counted = true;
       connectedUsers++;
@@ -88,47 +80,44 @@ io.on('connection', socket => {
 
     waitingUsers.push(socket);
 
-    // محاولة الربط بين مستخدمين
     if (waitingUsers.length >= 2) {
       const user1 = waitingUsers.shift();
       const user2 = waitingUsers.shift();
-
       const room = `room-${crypto.randomUUID()}`;
       
       user1.join(room);
       user2.join(room);
-      
       user1.room = room;
       user2.room = room;
 
-      // إشعار الطرفين بالاتصال
       io.to(room).emit('connected');
     } else {
       socket.emit('waiting');
     }
   });
 
-  // استقبال وإرسال الرسائل النصية
+  // إرسال النص
   socket.on('sendMessage', msg => {
     if (socket.room && msg.text) {
       const chatMsg = {
         id: msg.id || crypto.randomUUID(),
-        sender: socket.userName, // نرسل الاسم الحقيقي للمرسل
+        senderId: socket.id,       // <-- الهوية الفريدة للمرسل
+        senderName: socket.userName, // الاسم (للعرض فقط)
         text: msg.text,
         time: new Date().toISOString(),
         reactions: {}
       };
-      // نرسل الرسالة للغرفة (بما فيهم المرسل لضمان التزامن، لكن الفرونت سيفلترها)
       io.to(socket.room).emit('newMessage', chatMsg);
     }
   });
 
-  // استقبال وإرسال الرسائل الصوتية
+  // إرسال الصوت
   socket.on('sendVoice', data => {
     if (socket.room && data.url) {
       const chatMsg = {
         id: data.id || crypto.randomUUID(),
-        sender: socket.userName,
+        senderId: socket.id,       // <-- الهوية الفريدة للمرسل
+        senderName: socket.userName,
         url: data.url,
         duration: data.duration,
         time: new Date().toISOString(),
@@ -138,25 +127,21 @@ io.on('connection', socket => {
     }
   });
 
-  // التفاعلات (Reactions)
+  // التفاعلات
   socket.on('react', data => {
     if (!socket.room || !data.messageId) return;
-    // نرسل التفاعل للطرفين ليتم تحديث الواجهة
     io.to(socket.room).emit('newReaction', { 
       messageId: data.messageId, 
       reaction: data.reaction, 
-      sender: socket.userName 
+      senderId: socket.id,      // <-- الهوية الفريدة
+      senderName: socket.userName 
     });
   });
 
-  // مؤشر الكتابة
   socket.on('typing', () => {
-    if (socket.room) {
-      socket.to(socket.room).emit('typing');
-    }
+    if (socket.room) socket.to(socket.room).emit('typing');
   });
 
-  // مؤشرات التسجيل الصوتي
   socket.on('startRecording', () => {
     if (socket.room) socket.to(socket.room).emit('partnerRecording', true);
   });
@@ -166,7 +151,6 @@ io.on('connection', socket => {
   });
   
   socket.on('pauseRecording', () => {
-    // يمكن إضافة منطق خاص للإيقاف المؤقت إذا لزم الأمر
     if (socket.room) socket.to(socket.room).emit('partnerRecording', false); 
   });
   
@@ -174,30 +158,20 @@ io.on('connection', socket => {
     if (socket.room) socket.to(socket.room).emit('partnerRecording', true);
   });
 
-  // عند مغادرة المستخدم (زر التالي أو الخروج)
-  socket.on('leave', () => {
-    handleDisconnect(socket);
-  });
-
-  // عند انقطاع الاتصال كلياً
-  socket.on('disconnect', () => {
-    handleDisconnect(socket);
-  });
+  socket.on('leave', () => handleDisconnect(socket));
+  socket.on('disconnect', () => handleDisconnect(socket));
 });
 
 function handleDisconnect(socket) {
-  // إزالة من قائمة الانتظار إن وجد
   const idx = waitingUsers.indexOf(socket);
   if (idx !== -1) waitingUsers.splice(idx, 1);
 
-  // إبلاغ الشريك في الغرفة
   if (socket.room) {
     socket.to(socket.room).emit('partner_left');
     socket.leave(socket.room);
     socket.room = null;
   }
 
-  // تحديث العداد
   if (socket.counted) {
     connectedUsers--;
     socket.counted = false;
