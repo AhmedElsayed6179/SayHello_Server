@@ -9,7 +9,7 @@ const app = express();
 app.set('trust proxy', true);
 const server = http.createServer(app);
 
-const sessions = new Map(); // token -> { displayName, hiddenId }
+const sessions = new Map(); // token -> displayName
 let waitingUsers = [];
 let connectedUsers = 0;
 const messages = [];
@@ -32,7 +32,7 @@ app.use((req, res, next) => {
 });
 app.use(express.json());
 
-// Multer للرفع
+// إعداد Multer للرفع
 const storage = multer.diskStorage({
   destination: 'uploads/',
   filename: (req, file, cb) => {
@@ -48,18 +48,16 @@ app.post('/upload-voice', upload.single('voice'), (req, res) => {
 
 app.use('/uploads', express.static('uploads'));
 
-// إنشاء جلسة جديدة بدون أرقام ظاهرة
+// إنشاء جلسة جديدة بدون الاعتماد على الاسم المتكرر
 app.post('/start-chat', (req, res) => {
   const { name } = req.body;
   if (!name || typeof name !== 'string' || name.trim().length < 3 || name.trim().length > 20) {
     return res.status(400).json({ error: 'Invalid name' });
   }
-
-  const displayName = name.trim(); // الاسم الظاهر
-  const hiddenId = crypto.randomUUID(); // معرف مخفي فريد لكل جلسة
+  // توليد اسم عرض فريد لكل جلسة
+  const displayName = `${name.trim()} (\u200B${crypto.randomUUID().slice(0, 8)})`;
   const token = crypto.randomUUID();
-
-  sessions.set(token, { displayName, hiddenId });
+  sessions.set(token, displayName);
   res.json({ token });
 });
 
@@ -69,14 +67,13 @@ io.on('connection', socket => {
   socket.emit('user_count', connectedUsers);
 
   socket.on('join', token => {
-    const session = sessions.get(token);
-    if (!session) {
+    const name = sessions.get(token);
+    if (!name) {
       socket.emit('error', 'Invalid token');
       return socket.disconnect();
     }
 
-    socket.displayName = session.displayName; // الاسم الظاهر
-    socket.hiddenId = session.hiddenId;       // المعرف المخفي
+    socket.userName = name;
     sessions.delete(token);
 
     socket.counted = true;
@@ -106,8 +103,8 @@ io.on('connection', socket => {
     if (socket.room && msg.id && msg.text) {
       const chatMsg = {
         id: msg.id,
-        senderId: socket.hiddenId,     // معرف فريد داخلياً
-        sender: socket.displayName,     // الاسم الظاهر
+        senderId: socket.id,
+        sender: socket.userName,
         text: msg.text,
         time: new Date().toISOString(),
         reactions: {}
@@ -122,8 +119,8 @@ io.on('connection', socket => {
     if (socket.room && data.id) {
       const chatMsg = {
         id: data.id,
-        senderId: socket.hiddenId,
-        sender: socket.displayName,
+        senderId: socket.id,
+        sender: socket.userName,
         url: data.url,
         duration: data.duration,
         time: new Date().toISOString(),
