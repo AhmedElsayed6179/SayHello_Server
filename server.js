@@ -3,25 +3,27 @@ const http = require('http');
 const { Server } = require('socket.io');
 const crypto = require('crypto');
 const multer = require('multer');
-const path = require('path');
 
 const app = express();
+
 app.set('trust proxy', true);
+
 const server = http.createServer(app);
 
-const sessions = new Map(); // token -> displayName
-let waitingUsers = [];
+const sessions = new Map();
+let waitingUser = null;
 let connectedUsers = 0;
 const messages = [];
 
+// إعدادات CORS
 const allowedOrigin = 'https://sayhello-production-988b.up.railway.app';
-
 const corsOptions = {
   origin: allowedOrigin,
   methods: ['GET', 'POST', 'OPTIONS'],
   credentials: true
 };
 
+// Middleware للتعامل مع CORS
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', allowedOrigin);
   res.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
@@ -30,82 +32,89 @@ app.use((req, res, next) => {
   if (req.method === 'OPTIONS') return res.sendStatus(200);
   next();
 });
+
 app.use(express.json());
 
-// إعداد Multer للرفع
 const storage = multer.diskStorage({
   destination: 'uploads/',
   filename: (req, file, cb) => {
-    cb(null, crypto.randomUUID() + path.extname(file.originalname));
+    cb(null, crypto.randomUUID() + '.webm');
   }
 });
+
 const upload = multer({ storage });
 
 app.post('/upload-voice', upload.single('voice'), (req, res) => {
-  const fileUrl = `https://${req.get('host')}/uploads/${req.file.filename}`;
+  const fileUrl = `https://${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
   res.json({ url: fileUrl });
 });
 
 app.use('/uploads', express.static('uploads'));
 
-// إنشاء جلسة جديدة بدون الاعتماد على الاسم المتكرر
+// إنشاء توكن للمستخدم
 app.post('/start-chat', (req, res) => {
   const { name } = req.body;
   if (!name || typeof name !== 'string' || name.trim().length < 3 || name.trim().length > 20) {
     return res.status(400).json({ error: 'Invalid name' });
   }
-  // توليد اسم عرض فريد لكل جلسة
-  const hiddenId = crypto.randomUUID().slice(0, 8); // معرف داخلي فقط
-  const displayName = `(${name.trim()})`; // الاسم المعروض بين قوسين
-  socket.internalId = hiddenId; // للاستخدام الداخلي فقط
   const token = crypto.randomUUID();
-  sessions.set(token, displayName);
+  sessions.set(token, name.trim());
   res.json({ token });
 });
 
+// إعداد Socket.IO
 const io = new Server(server, { cors: corsOptions });
 
+function decreaseUserCount(socket) {
+  if (waitingUser && waitingUser.id === socket.id) {
+    waitingUser = null;
+  }
+
+  if (socket.counted) {
+    connectedUsers--;
+    socket.counted = false;
+    io.emit('user_count', connectedUsers);
+  }
+}
+
 io.on('connection', socket => {
+  console.log('User connected:', socket.id);
+
+  // لا تزيد connectedUsers هنا
   socket.emit('user_count', connectedUsers);
 
-  socket.on('join', token => {
+  socket.on('join', async token => {
     const name = sessions.get(token);
-    if (!name) {
-      socket.emit('error', 'Invalid token');
-      return socket.disconnect();
-    }
+    if (!name) { socket.emit('error', 'Invalid token'); return socket.disconnect(); }
 
+    socket.userId = socket.id;
     socket.userName = name;
     sessions.delete(token);
 
-    socket.counted = true;
+    // فقط عند انضمام المستخدم الفعلي
+    socket.counted = true; // فلاغ جديد
     connectedUsers++;
     io.emit('user_count', connectedUsers);
 
-    waitingUsers.push(socket);
-
-    if (waitingUsers.length >= 2) {
-      const user1 = waitingUsers.shift();
-      const user2 = waitingUsers.shift();
-
-      const room = `room-${crypto.randomUUID()}`;
-      user1.join(room);
-      user2.join(room);
-      user1.room = room;
-      user2.room = room;
-
+    // غرف الدردشة الثنائية
+    if (waitingUser && waitingUser.id !== socket.id) {
+      const room = `room-${socket.id}-${waitingUser.id}`;
+      socket.join(room);
+      waitingUser.join(room);
+      socket.room = room;
+      waitingUser.room = room;
       io.to(room).emit('connected');
+      waitingUser = null;
     } else {
+      waitingUser = socket;
       socket.emit('waiting');
     }
   });
 
-  // إرسال نص
   socket.on('sendMessage', msg => {
     if (socket.room && msg.id && msg.text) {
       const chatMsg = {
         id: msg.id,
-        senderId: socket.id,
         sender: socket.userName,
         text: msg.text,
         time: new Date().toISOString(),
@@ -116,12 +125,10 @@ io.on('connection', socket => {
     }
   });
 
-  // إرسال صوت
   socket.on('sendVoice', data => {
     if (socket.room && data.id) {
       const chatMsg = {
         id: data.id,
-        senderId: socket.id,
         sender: socket.userName,
         url: data.url,
         duration: data.duration,
@@ -133,9 +140,9 @@ io.on('connection', socket => {
     }
   });
 
-  // الإيموشن
   socket.on('react', data => {
     if (!socket.room || !data.messageId) return;
+
     const { messageId, reaction, sender } = data;
     const msg = messages.find(m => m.id === messageId);
     if (!msg) return;
@@ -144,43 +151,56 @@ io.on('connection', socket => {
     if (!msg.reactions[reaction]) msg.reactions[reaction] = [];
 
     const idx = msg.reactions[reaction].indexOf(sender);
-    if (idx === -1) msg.reactions[reaction].push(sender);
-    else msg.reactions[reaction].splice(idx, 1);
-    if (msg.reactions[reaction].length === 0) delete msg.reactions[reaction];
 
-    io.to(socket.room).emit('newReaction', { messageId, reactions: msg.reactions });
+    if (idx === -1) {
+      msg.reactions[reaction].push(sender);
+    } else {
+      msg.reactions[reaction].splice(idx, 1);
+      if (msg.reactions[reaction].length === 0) {
+        delete msg.reactions[reaction];
+      }
+    }
+
+    io.to(socket.room).emit('newReaction', {
+      messageId,
+      reactions: msg.reactions
+    });
   });
 
-  socket.on('typing', () => { if (socket.room) socket.to(socket.room).emit('typing'); });
+  socket.on('typing', () => {
+    if (socket.room) socket.to(socket.room).emit('typing');
+  });
 
-  socket.on('startRecording', () => { if (socket.room) socket.to(socket.room).emit('partnerRecording', true); });
-  socket.on('stopRecording', () => { if (socket.room) socket.to(socket.room).emit('partnerRecording', false); });
+  socket.on('startRecording', () => {
+    if (!socket.room) return;
 
-  socket.on('leave', () => {
+    socket.to(socket.room).emit('partnerRecording', true);
+  });
+
+  socket.on('stopRecording', () => {
+    if (!socket.room) return;
+
+    socket.to(socket.room).emit('partnerRecording', false);
+  });
+
+  socket.on('leave', async () => {
     if (socket.room) {
       socket.to(socket.room).emit('partner_left');
       socket.leave(socket.room);
       socket.room = null;
     }
-    const idx = waitingUsers.indexOf(socket);
-    if (idx !== -1) waitingUsers.splice(idx, 1);
 
-    if (socket.counted) {
-      connectedUsers--;
-      io.emit('user_count', connectedUsers);
-    }
+    decreaseUserCount(socket);
   });
 
-  socket.on('disconnect', () => {
-    const idx = waitingUsers.indexOf(socket);
-    if (idx !== -1) waitingUsers.splice(idx, 1);
-
-    if (socket.room) socket.to(socket.room).emit('partner_left');
-
-    if (socket.counted) {
-      connectedUsers--;
-      io.emit('user_count', connectedUsers);
+  socket.on('disconnect', async () => {
+    if (waitingUser && waitingUser.id === socket.id) waitingUser = null;
+    if (socket.room) {
+      const room = socket.room;
+      socket.to(room).emit('partner_left');
     }
+
+    decreaseUserCount(socket);
   });
 });
 
