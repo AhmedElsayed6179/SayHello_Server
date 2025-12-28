@@ -3,12 +3,13 @@ const http = require('http');
 const { Server } = require('socket.io');
 const crypto = require('crypto');
 const multer = require('multer');
+const path = require('path');
 
 const app = express();
 app.set('trust proxy', true);
 const server = http.createServer(app);
 
-const sessions = new Map();
+const sessions = new Map(); // كل token مرتبط بجلسة معينة
 let waitingUsers = [];
 let connectedUsers = 0;
 const messages = [];
@@ -20,6 +21,7 @@ const corsOptions = {
   credentials: true
 };
 
+// CORS Middleware
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', allowedOrigin);
   res.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
@@ -30,10 +32,11 @@ app.use((req, res, next) => {
 });
 app.use(express.json());
 
+// Multer للرفع
 const storage = multer.diskStorage({
   destination: 'uploads/',
   filename: (req, file, cb) => {
-    cb(null, crypto.randomUUID() + '.webm');
+    cb(null, crypto.randomUUID() + path.extname(file.originalname));
   }
 });
 const upload = multer({ storage });
@@ -45,6 +48,7 @@ app.post('/upload-voice', upload.single('voice'), (req, res) => {
 
 app.use('/uploads', express.static('uploads'));
 
+// بدء جلسة دردشة
 app.post('/start-chat', (req, res) => {
   const { name } = req.body;
   if (!name || typeof name !== 'string' || name.trim().length < 3 || name.trim().length > 20) {
@@ -55,6 +59,7 @@ app.post('/start-chat', (req, res) => {
   res.json({ token });
 });
 
+// Socket.IO
 const io = new Server(server, { cors: corsOptions });
 
 io.on('connection', socket => {
@@ -62,10 +67,13 @@ io.on('connection', socket => {
 
   socket.on('join', token => {
     const name = sessions.get(token);
-    if (!name) { socket.emit('error', 'Invalid token'); return socket.disconnect(); }
+    if (!name) {
+      socket.emit('error', 'Invalid token');
+      return socket.disconnect();
+    }
 
-    socket.userName = name; // الاسم للعرض فقط
-    sessions.delete(token);
+    socket.userName = name; // للعرض فقط
+    sessions.delete(token); // كل token يُستخدم مرة واحدة
 
     socket.counted = true;
     connectedUsers++;
@@ -73,6 +81,7 @@ io.on('connection', socket => {
 
     waitingUsers.push(socket);
 
+    // pairing
     if (waitingUsers.length >= 2) {
       const user1 = waitingUsers.shift();
       const user2 = waitingUsers.shift();
@@ -89,6 +98,7 @@ io.on('connection', socket => {
     }
   });
 
+  // إرسال نص
   socket.on('sendMessage', msg => {
     if (socket.room && msg.id && msg.text) {
       const chatMsg = {
@@ -103,6 +113,7 @@ io.on('connection', socket => {
     }
   });
 
+  // إرسال صوت
   socket.on('sendVoice', data => {
     if (socket.room && data.id) {
       const chatMsg = {
@@ -118,6 +129,7 @@ io.on('connection', socket => {
     }
   });
 
+  // الإيموشن
   socket.on('react', data => {
     if (!socket.room || !data.messageId) return;
 
@@ -136,10 +148,14 @@ io.on('connection', socket => {
     io.to(socket.room).emit('newReaction', { messageId, reactions: msg.reactions });
   });
 
+  // الكتابة
   socket.on('typing', () => { if (socket.room) socket.to(socket.room).emit('typing'); });
+
+  // تسجيل صوتي
   socket.on('startRecording', () => { if (socket.room) socket.to(socket.room).emit('partnerRecording', true); });
   socket.on('stopRecording', () => { if (socket.room) socket.to(socket.room).emit('partnerRecording', false); });
 
+  // مغادرة الجلسة
   socket.on('leave', () => {
     if (socket.room) {
       socket.to(socket.room).emit('partner_left');
