@@ -55,7 +55,7 @@ app.post('/start-chat', (req, res) => {
     return res.status(400).json({ error: 'Invalid name' });
   }
   // توليد اسم عرض فريد لكل جلسة
-  const displayName = `${name.trim()}-${Math.floor(Math.random() * 10000)}`;
+  const displayName = name.trim(); // اسم المستخدم الحقيقي فقط
   const token = crypto.randomUUID();
   sessions.set(token, displayName);
   res.json({ token });
@@ -104,7 +104,7 @@ io.on('connection', socket => {
       const chatMsg = {
         id: msg.id,
         senderId: socket.id,
-        sender: socket.userName, 
+        sender: socket.userName,
         text: msg.text,
         time: new Date().toISOString(),
         reactions: {}
