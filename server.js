@@ -46,28 +46,14 @@ app.post('/upload-voice', upload.single('voice'), (req, res) => {
 });
 app.use('/uploads', express.static('uploads'));
 
-// إنشاء توكن للمستخدم مع التحقق من الاسم المتصل حالياً
+// تسجيل المستخدم بالاسم مباشرة بدون أي تحقق
 app.post('/start-chat', (req, res) => {
   const { name } = req.body;
   if (!name || typeof name !== 'string' || name.trim().length < 3 || name.trim().length > 20) {
     return res.status(400).json({ error: 'Invalid name' });
   }
-  const trimmedName = name.trim().toLowerCase();
-
-  // تحقق من الأسماء المتصلة حالياً عبر Sockets
-  const connectedNames = Array.from(io.sockets.sockets.values())
-    .map(s => s.userName?.toLowerCase())
-    .filter(Boolean);
-
-  if (connectedNames.includes(trimmedName)) {
-    return res.status(400).json({
-      error: 'NAME_TAKEN',
-      message: 'This name is already in use by an online user. Please choose another one.'
-    });
-  }
-
-  const token = crypto.randomUUID();
-  res.json({ token });
+  const trimmedName = name.trim();
+  res.json({ name: trimmedName });
 });
 
 // إعداد Socket.IO
@@ -86,21 +72,14 @@ io.on('connection', socket => {
   console.log('User connected:', socket.id);
   socket.emit('user_count', connectedUsers);
 
-  socket.on('join', token => {
-    // هنا الاسم سيأتي من الكلاينت عند توكن
-    const name = token?.trim();
-    if (!name) { socket.emit('error', 'Invalid token'); return socket.disconnect(); }
-
-    // تحقق مرة أخرى قبل الانضمام (لضمان عدم وجود تزامن)
-    const connectedNames = Array.from(io.sockets.sockets.values())
-      .map(s => s.userName?.toLowerCase())
-      .filter(Boolean);
-    if (connectedNames.includes(name.toLowerCase())) {
-      socket.emit('error', 'NAME_TAKEN');
+  socket.on('join', name => {
+    if (!name || typeof name !== 'string') {
+      socket.emit('error', 'Invalid name');
       return socket.disconnect();
     }
 
-    socket.userName = name;
+    const trimmedName = name.trim();
+    socket.userName = trimmedName;
     socket.counted = true;
     connectedUsers++;
     io.emit('user_count', connectedUsers);
@@ -120,10 +99,11 @@ io.on('connection', socket => {
     }
   });
 
+  // الرسائل النصية
   socket.on('sendMessage', msg => {
-    if (socket.room && msg.id && msg.text) {
+    if (socket.room && msg.text) {
       const chatMsg = {
-        id: msg.id,
+        id: crypto.randomUUID(),
         sender: socket.userName,
         text: msg.text,
         time: new Date().toISOString(),
@@ -134,13 +114,14 @@ io.on('connection', socket => {
     }
   });
 
+  // الرسائل الصوتية
   socket.on('sendVoice', data => {
-    if (socket.room && data.id) {
+    if (socket.room && data.url) {
       const chatMsg = {
-        id: data.id,
+        id: crypto.randomUUID(),
         sender: socket.userName,
         url: data.url,
-        duration: data.duration,
+        duration: data.duration || 0,
         time: new Date().toISOString(),
         reactions: {}
       };
