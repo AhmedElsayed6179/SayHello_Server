@@ -99,7 +99,7 @@ io.on('connection', socket => {
     if (socket.room && msg.id && msg.text) {
       const chatMsg = {
         id: msg.id,
-        senderId: socket.id,      // ← معرف الجلسة للتحكم من السيرفر
+        senderId: socket.id,      // ← فريد لكل اتصال
         sender: socket.userName,
         text: msg.text,
         time: new Date().toISOString(),
@@ -115,7 +115,7 @@ io.on('connection', socket => {
     if (socket.room && data.id) {
       const chatMsg = {
         id: data.id,
-        senderId: socket.id,      // ← معرف الجلسة
+        senderId: socket.id,      // ← فريد لكل اتصال
         sender: socket.userName,
         url: data.url,
         duration: data.duration,
