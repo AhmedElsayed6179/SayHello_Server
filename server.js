@@ -59,12 +59,12 @@ app.post('/start-chat', (req, res) => {
     return res.status(400).json({ error: 'Invalid name' });
   }
 
-  // تحقق هل الاسم موجود بالفعل على جهاز مختلف
-  const nameTaken = Array.from(sessions.values()).some(session =>
-    session.name === name.trim() && session.deviceId !== deviceId
+  // تحقق إذا نفس الاسم موجود على نفس الجهاز
+  const exists = Array.from(sessions.values()).some(
+    session => session.name === name.trim() && session.deviceId === deviceId
   );
 
-  if (nameTaken) {
+  if (exists) {
     return res.status(400).json({ error: 'NAME_TAKEN' });
   }
 
