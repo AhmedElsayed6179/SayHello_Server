@@ -3,17 +3,17 @@ const http = require('http');
 const { Server } = require('socket.io');
 const crypto = require('crypto');
 const multer = require('multer');
+const path = require('path');
 
 const app = express();
 app.set('trust proxy', true);
-
 const server = http.createServer(app);
 
-let waitingUser = null;
+const sessions = new Map(); // تخزين الاسم مقابل التوكن
+let waitingUsers = [];
 let connectedUsers = 0;
-const messages = [];
 
-// إعدادات CORS
+// النطاق المسموح به (عدله حسب رابط الفرونت إند الخاص بك)
 const allowedOrigin = 'https://sayhello-production-988b.up.railway.app';
 const corsOptions = {
   origin: allowedOrigin,
@@ -21,6 +21,7 @@ const corsOptions = {
   credentials: true
 };
 
+// Middleware CORS
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', allowedOrigin);
   res.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
@@ -31,36 +32,172 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json());
+app.use('/uploads', express.static('uploads'));
 
+// إعداد رفع الملفات الصوتية
 const storage = multer.diskStorage({
   destination: 'uploads/',
   filename: (req, file, cb) => {
-    cb(null, crypto.randomUUID() + '.webm');
+    cb(null, crypto.randomUUID() + path.extname(file.originalname));
   }
 });
 const upload = multer({ storage });
 
 app.post('/upload-voice', upload.single('voice'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
   const fileUrl = `https://${req.get('host')}/uploads/${req.file.filename}`;
   res.json({ url: fileUrl });
 });
-app.use('/uploads', express.static('uploads'));
 
-// تسجيل المستخدم بالاسم مباشرة بدون أي تحقق
+// بدء المحادثة وتخزين الاسم
 app.post('/start-chat', (req, res) => {
   const { name } = req.body;
-  if (!name || typeof name !== 'string' || name.trim().length < 3 || name.trim().length > 20) {
+  if (!name || typeof name !== 'string' || name.trim().length < 3) {
     return res.status(400).json({ error: 'Invalid name' });
   }
-  const trimmedName = name.trim();
-  res.json({ name: trimmedName });
+  const token = crypto.randomUUID();
+  sessions.set(token, name.trim());
+  res.json({ token });
 });
 
-// إعداد Socket.IO
+// Socket.IO Logic
 const io = new Server(server, { cors: corsOptions });
 
-function decreaseUserCount(socket) {
-  if (waitingUser && waitingUser.id === socket.id) waitingUser = null;
+io.on('connection', socket => {
+  // إرسال عدد المتصلين فور الاتصال
+  socket.emit('user_count', connectedUsers);
+
+  socket.on('join', token => {
+    const name = sessions.get(token);
+    
+    if (!name) {
+      socket.emit('error', 'Invalid token');
+      return; // لا تفصل الاتصال فوراً، فقط أرسل خطأ
+    }
+
+    // حفظ بيانات المستخدم في السوكيت
+    socket.userName = name;
+    sessions.delete(token); // حذف التوكن لعدم استخدامه مرة أخرى
+
+    // تحديث العداد
+    if (!socket.counted) {
+      socket.counted = true;
+      connectedUsers++;
+      io.emit('user_count', connectedUsers);
+    }
+
+    waitingUsers.push(socket);
+
+    // محاولة الربط بين مستخدمين
+    if (waitingUsers.length >= 2) {
+      const user1 = waitingUsers.shift();
+      const user2 = waitingUsers.shift();
+
+      const room = `room-${crypto.randomUUID()}`;
+      
+      user1.join(room);
+      user2.join(room);
+      
+      user1.room = room;
+      user2.room = room;
+
+      // إشعار الطرفين بالاتصال
+      io.to(room).emit('connected');
+    } else {
+      socket.emit('waiting');
+    }
+  });
+
+  // استقبال وإرسال الرسائل النصية
+  socket.on('sendMessage', msg => {
+    if (socket.room && msg.text) {
+      const chatMsg = {
+        id: msg.id || crypto.randomUUID(),
+        sender: socket.userName, // نرسل الاسم الحقيقي للمرسل
+        text: msg.text,
+        time: new Date().toISOString(),
+        reactions: {}
+      };
+      // نرسل الرسالة للغرفة (بما فيهم المرسل لضمان التزامن، لكن الفرونت سيفلترها)
+      io.to(socket.room).emit('newMessage', chatMsg);
+    }
+  });
+
+  // استقبال وإرسال الرسائل الصوتية
+  socket.on('sendVoice', data => {
+    if (socket.room && data.url) {
+      const chatMsg = {
+        id: data.id || crypto.randomUUID(),
+        sender: socket.userName,
+        url: data.url,
+        duration: data.duration,
+        time: new Date().toISOString(),
+        reactions: {}
+      };
+      io.to(socket.room).emit('newVoice', chatMsg);
+    }
+  });
+
+  // التفاعلات (Reactions)
+  socket.on('react', data => {
+    if (!socket.room || !data.messageId) return;
+    // نرسل التفاعل للطرفين ليتم تحديث الواجهة
+    io.to(socket.room).emit('newReaction', { 
+      messageId: data.messageId, 
+      reaction: data.reaction, 
+      sender: socket.userName 
+    });
+  });
+
+  // مؤشر الكتابة
+  socket.on('typing', () => {
+    if (socket.room) {
+      socket.to(socket.room).emit('typing');
+    }
+  });
+
+  // مؤشرات التسجيل الصوتي
+  socket.on('startRecording', () => {
+    if (socket.room) socket.to(socket.room).emit('partnerRecording', true);
+  });
+  
+  socket.on('stopRecording', () => {
+    if (socket.room) socket.to(socket.room).emit('partnerRecording', false);
+  });
+  
+  socket.on('pauseRecording', () => {
+    // يمكن إضافة منطق خاص للإيقاف المؤقت إذا لزم الأمر
+    if (socket.room) socket.to(socket.room).emit('partnerRecording', false); 
+  });
+  
+  socket.on('resumeRecording', () => {
+    if (socket.room) socket.to(socket.room).emit('partnerRecording', true);
+  });
+
+  // عند مغادرة المستخدم (زر التالي أو الخروج)
+  socket.on('leave', () => {
+    handleDisconnect(socket);
+  });
+
+  // عند انقطاع الاتصال كلياً
+  socket.on('disconnect', () => {
+    handleDisconnect(socket);
+  });
+});
+
+function handleDisconnect(socket) {
+  // إزالة من قائمة الانتظار إن وجد
+  const idx = waitingUsers.indexOf(socket);
+  if (idx !== -1) waitingUsers.splice(idx, 1);
+
+  // إبلاغ الشريك في الغرفة
+  if (socket.room) {
+    socket.to(socket.room).emit('partner_left');
+    socket.leave(socket.room);
+    socket.room = null;
+  }
+
+  // تحديث العداد
   if (socket.counted) {
     connectedUsers--;
     socket.counted = false;
@@ -68,105 +205,5 @@ function decreaseUserCount(socket) {
   }
 }
 
-io.on('connection', socket => {
-  console.log('User connected:', socket.id);
-  socket.emit('user_count', connectedUsers);
-
-  socket.on('join', name => {
-    if (!name || typeof name !== 'string') {
-      socket.emit('error', 'Invalid name');
-      return socket.disconnect();
-    }
-
-    const trimmedName = name.trim();
-    socket.userName = trimmedName;
-    socket.counted = true;
-    connectedUsers++;
-    io.emit('user_count', connectedUsers);
-
-    // غرف الدردشة الثنائية
-    if (waitingUser && waitingUser.id !== socket.id) {
-      const room = `room-${socket.id}-${waitingUser.id}`;
-      socket.join(room);
-      waitingUser.join(room);
-      socket.room = room;
-      waitingUser.room = room;
-      io.to(room).emit('connected');
-      waitingUser = null;
-    } else {
-      waitingUser = socket;
-      socket.emit('waiting');
-    }
-  });
-
-  // الرسائل النصية
-  socket.on('sendMessage', msg => {
-    if (socket.room && msg.text) {
-      const chatMsg = {
-        id: crypto.randomUUID(),
-        sender: socket.userName,
-        text: msg.text,
-        time: new Date().toISOString(),
-        reactions: {}
-      };
-      messages.push(chatMsg);
-      io.to(socket.room).emit('newMessage', chatMsg);
-    }
-  });
-
-  // الرسائل الصوتية
-  socket.on('sendVoice', data => {
-    if (socket.room && data.url) {
-      const chatMsg = {
-        id: crypto.randomUUID(),
-        sender: socket.userName,
-        url: data.url,
-        duration: data.duration || 0,
-        time: new Date().toISOString(),
-        reactions: {}
-      };
-      messages.push(chatMsg);
-      io.to(socket.room).emit('newVoice', chatMsg);
-    }
-  });
-
-  socket.on('react', data => {
-    if (!socket.room || !data.messageId) return;
-
-    const { messageId, reaction, sender } = data;
-    const msg = messages.find(m => m.id === messageId);
-    if (!msg) return;
-
-    if (!msg.reactions) msg.reactions = {};
-    if (!msg.reactions[reaction]) msg.reactions[reaction] = [];
-    const idx = msg.reactions[reaction].indexOf(sender);
-    if (idx === -1) msg.reactions[reaction].push(sender);
-    else {
-      msg.reactions[reaction].splice(idx, 1);
-      if (msg.reactions[reaction].length === 0) delete msg.reactions[reaction];
-    }
-    io.to(socket.room).emit('newReaction', { messageId, reactions: msg.reactions });
-  });
-
-  socket.on('typing', () => { if (socket.room) socket.to(socket.room).emit('typing'); });
-  socket.on('startRecording', () => { if (socket.room) socket.to(socket.room).emit('partnerRecording', true); });
-  socket.on('stopRecording', () => { if (socket.room) socket.to(socket.room).emit('partnerRecording', false); });
-
-  socket.on('leave', () => {
-    if (socket.room) {
-      socket.to(socket.room).emit('partner_left');
-      socket.leave(socket.room);
-      socket.room = null;
-    }
-    decreaseUserCount(socket);
-  });
-
-  socket.on('disconnect', () => {
-    if (waitingUser && waitingUser.id === socket.id) waitingUser = null;
-    if (socket.room) socket.to(socket.room).emit('partner_left');
-    decreaseUserCount(socket);
-  });
-});
-
 const PORT = process.env.PORT || 8080;
-server.listen(PORT, () => console.log('Server running on port', PORT));
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
