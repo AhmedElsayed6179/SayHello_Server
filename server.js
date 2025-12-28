@@ -3,6 +3,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const crypto = require('crypto');
 const multer = require('multer');
+const { v4: uuidv4 } = require('uuid');
 
 const app = express();
 
@@ -53,13 +54,14 @@ app.use('/uploads', express.static('uploads'));
 
 // إنشاء توكن للمستخدم
 app.post('/start-chat', (req, res) => {
-  const { name } = req.body;
+  const { name, deviceId } = req.body;
   if (!name || typeof name !== 'string' || name.trim().length < 3 || name.trim().length > 20) {
     return res.status(400).json({ error: 'Invalid name' });
   }
-  const token = crypto.randomUUID();
-  sessions.set(token, name.trim());
-  res.json({ token });
+
+  const token = uuidv4(); // توكن جديد لكل جلسة
+  sessions.set(token, { name: name.trim(), deviceId: deviceId || null });
+  res.json({ token })
 });
 
 // إعداد Socket.IO
@@ -84,11 +86,12 @@ io.on('connection', socket => {
   socket.emit('user_count', connectedUsers);
 
   socket.on('join', async token => {
-    const name = sessions.get(token);
-    if (!name) { socket.emit('error', 'Invalid token'); return socket.disconnect(); }
+    const session = sessions.get(token);
+    if (!session) { socket.emit('error', 'Invalid token'); return socket.disconnect(); }
 
     socket.userId = socket.id;
-    socket.userName = name;
+    socket.userName = session.name;
+    socket.deviceId = session.deviceId;
     sessions.delete(token);
 
     // فقط عند انضمام المستخدم الفعلي
@@ -97,7 +100,7 @@ io.on('connection', socket => {
     io.emit('user_count', connectedUsers);
 
     // غرف الدردشة الثنائية
-    if (waitingUser && waitingUser.id !== socket.id) {
+    if (waitingUser && waitingUser.deviceId !== socket.deviceId) {
       const room = `room-${socket.id}-${waitingUser.id}`;
       socket.join(room);
       waitingUser.join(room);
