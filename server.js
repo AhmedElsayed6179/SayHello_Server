@@ -66,10 +66,7 @@ app.post('/start-chat', (req, res) => {
 const io = new Server(server, { cors: corsOptions });
 
 function decreaseUserCount(socket) {
-  if (waitingUser && waitingUser.id === socket.id) {
-    waitingUser = null;
-  }
-
+  if (waitingUser && waitingUser.id === socket.id) waitingUser = null;
   if (socket.counted) {
     connectedUsers--;
     socket.counted = false;
@@ -116,7 +113,7 @@ io.on('connection', socket => {
       const chatMsg = {
         id: msg.id,
         senderId: socket.userId,
-        senderName: socket.userName, // ← صح هنا
+        senderName: socket.userName,
         text: msg.text,
         time: new Date().toISOString(),
         reactions: {}
@@ -131,7 +128,7 @@ io.on('connection', socket => {
       const chatMsg = {
         id: data.id,
         senderId: socket.userId,
-        senderName: socket.userName, // ← هنا مهم
+        senderName: socket.userName,
         url: data.url,
         duration: data.duration,
         time: new Date().toISOString(),
@@ -195,13 +192,9 @@ io.on('connection', socket => {
     decreaseUserCount(socket);
   });
 
-  socket.on('disconnect', async () => {
+  socket.on('disconnect', () => {
     if (waitingUser && waitingUser.id === socket.id) waitingUser = null;
-    if (socket.room) {
-      const room = socket.room;
-      socket.to(room).emit('partner_left');
-    }
-
+    if (socket.room) socket.to(socket.room).emit('partner_left');
     decreaseUserCount(socket);
   });
 });
