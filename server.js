@@ -5,17 +5,14 @@ const crypto = require('crypto');
 const multer = require('multer');
 
 const app = express();
-
 app.set('trust proxy', true);
-
 const server = http.createServer(app);
 
 const sessions = new Map();
-let waitingUser = null;
+let waitingUsers = [];
 let connectedUsers = 0;
 const messages = [];
 
-// إعدادات CORS
 const allowedOrigin = 'https://sayhello-production-988b.up.railway.app';
 const corsOptions = {
   origin: allowedOrigin,
@@ -23,7 +20,6 @@ const corsOptions = {
   credentials: true
 };
 
-// Middleware للتعامل مع CORS
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', allowedOrigin);
   res.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
@@ -32,7 +28,6 @@ app.use((req, res, next) => {
   if (req.method === 'OPTIONS') return res.sendStatus(200);
   next();
 });
-
 app.use(express.json());
 
 const storage = multer.diskStorage({
@@ -41,17 +36,15 @@ const storage = multer.diskStorage({
     cb(null, crypto.randomUUID() + '.webm');
   }
 });
-
 const upload = multer({ storage });
 
 app.post('/upload-voice', upload.single('voice'), (req, res) => {
-  const fileUrl = `https://${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+  const fileUrl = `https://${req.get('host')}/uploads/${req.file.filename}`;
   res.json({ url: fileUrl });
 });
 
 app.use('/uploads', express.static('uploads'));
 
-// إنشاء توكن للمستخدم
 app.post('/start-chat', (req, res) => {
   const { name } = req.body;
   if (!name || typeof name !== 'string' || name.trim().length < 3 || name.trim().length > 20) {
@@ -62,51 +55,36 @@ app.post('/start-chat', (req, res) => {
   res.json({ token });
 });
 
-// إعداد Socket.IO
 const io = new Server(server, { cors: corsOptions });
 
-function decreaseUserCount(socket) {
-  if (waitingUser && waitingUser.id === socket.id) {
-    waitingUser = null;
-  }
-
-  if (socket.counted) {
-    connectedUsers--;
-    socket.counted = false;
-    io.emit('user_count', connectedUsers);
-  }
-}
-
 io.on('connection', socket => {
-  console.log('User connected:', socket.id);
-
-  // لا تزيد connectedUsers هنا
   socket.emit('user_count', connectedUsers);
 
-  socket.on('join', async token => {
+  socket.on('join', token => {
     const name = sessions.get(token);
     if (!name) { socket.emit('error', 'Invalid token'); return socket.disconnect(); }
 
-    socket.userId = socket.id;
-    socket.userName = name;
+    socket.userName = name; // الاسم للعرض فقط
     sessions.delete(token);
 
-    // فقط عند انضمام المستخدم الفعلي
-    socket.counted = true; // فلاغ جديد
+    socket.counted = true;
     connectedUsers++;
     io.emit('user_count', connectedUsers);
 
-    // غرف الدردشة الثنائية
-    if (waitingUser && waitingUser.id !== socket.id) {
-      const room = `room-${socket.id}-${waitingUser.id}`;
-      socket.join(room);
-      waitingUser.join(room);
-      socket.room = room;
-      waitingUser.room = room;
+    waitingUsers.push(socket);
+
+    if (waitingUsers.length >= 2) {
+      const user1 = waitingUsers.shift();
+      const user2 = waitingUsers.shift();
+
+      const room = `room-${user1.id}-${user2.id}`;
+      user1.join(room);
+      user2.join(room);
+      user1.room = room;
+      user2.room = room;
+
       io.to(room).emit('connected');
-      waitingUser = null;
     } else {
-      waitingUser = socket;
       socket.emit('waiting');
     }
   });
@@ -151,56 +129,42 @@ io.on('connection', socket => {
     if (!msg.reactions[reaction]) msg.reactions[reaction] = [];
 
     const idx = msg.reactions[reaction].indexOf(sender);
+    if (idx === -1) msg.reactions[reaction].push(sender);
+    else msg.reactions[reaction].splice(idx, 1);
+    if (msg.reactions[reaction].length === 0) delete msg.reactions[reaction];
 
-    if (idx === -1) {
-      msg.reactions[reaction].push(sender);
-    } else {
-      msg.reactions[reaction].splice(idx, 1);
-      if (msg.reactions[reaction].length === 0) {
-        delete msg.reactions[reaction];
-      }
-    }
-
-    io.to(socket.room).emit('newReaction', {
-      messageId,
-      reactions: msg.reactions
-    });
+    io.to(socket.room).emit('newReaction', { messageId, reactions: msg.reactions });
   });
 
-  socket.on('typing', () => {
-    if (socket.room) socket.to(socket.room).emit('typing');
-  });
+  socket.on('typing', () => { if (socket.room) socket.to(socket.room).emit('typing'); });
+  socket.on('startRecording', () => { if (socket.room) socket.to(socket.room).emit('partnerRecording', true); });
+  socket.on('stopRecording', () => { if (socket.room) socket.to(socket.room).emit('partnerRecording', false); });
 
-  socket.on('startRecording', () => {
-    if (!socket.room) return;
-
-    socket.to(socket.room).emit('partnerRecording', true);
-  });
-
-  socket.on('stopRecording', () => {
-    if (!socket.room) return;
-
-    socket.to(socket.room).emit('partnerRecording', false);
-  });
-
-  socket.on('leave', async () => {
+  socket.on('leave', () => {
     if (socket.room) {
       socket.to(socket.room).emit('partner_left');
       socket.leave(socket.room);
       socket.room = null;
     }
+    const idx = waitingUsers.indexOf(socket);
+    if (idx !== -1) waitingUsers.splice(idx, 1);
 
-    decreaseUserCount(socket);
+    if (socket.counted) {
+      connectedUsers--;
+      io.emit('user_count', connectedUsers);
+    }
   });
 
-  socket.on('disconnect', async () => {
-    if (waitingUser && waitingUser.id === socket.id) waitingUser = null;
-    if (socket.room) {
-      const room = socket.room;
-      socket.to(room).emit('partner_left');
-    }
+  socket.on('disconnect', () => {
+    const idx = waitingUsers.indexOf(socket);
+    if (idx !== -1) waitingUsers.splice(idx, 1);
 
-    decreaseUserCount(socket);
+    if (socket.room) socket.to(socket.room).emit('partner_left');
+
+    if (socket.counted) {
+      connectedUsers--;
+      io.emit('user_count', connectedUsers);
+    }
   });
 });
 
