@@ -59,19 +59,19 @@ app.post('/start-chat', (req, res) => {
     return res.status(400).json({ error: 'Invalid name' });
   }
 
-  const token = uuidv4(); // توكن جديد لكل جلسة
+  // تحقق هل الاسم موجود بالفعل على جهاز مختلف
+  const nameTaken = Array.from(sessions.values()).some(session =>
+    session.name === name.trim() && session.deviceId !== deviceId
+  );
+
+  if (nameTaken) {
+    return res.status(400).json({ error: 'NAME_TAKEN' });
+  }
+
+  const token = uuidv4();
   sessions.set(token, { name: name.trim(), deviceId: deviceId || null });
-  res.json({ token })
+  res.json({ token });
 });
-
-app.post('/check-device', (req, res) => {
-  const { deviceId } = req.body;
-  if (!deviceId) return res.status(400).json({ error: 'No deviceId' });
-
-  const exists = Array.from(sessions.values()).some(session => session.deviceId === deviceId);
-  res.json({ exists });
-});
-
 
 // إعداد Socket.IO
 const io = new Server(server, { cors: corsOptions });
