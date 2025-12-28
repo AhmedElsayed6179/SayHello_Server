@@ -13,7 +13,7 @@ const sessions = new Map(); // token -> name
 let waitingUsers = [];
 let connectedUsers = 0;
 
-// عدل هذا الرابط برابط الفرونت إند الخاص بك
+// استبدل هذا الرابط برابط الفرونت إند الخاص بك
 const allowedOrigin = 'https://sayhello-production-988b.up.railway.app';
 const corsOptions = {
   origin: allowedOrigin,
@@ -101,8 +101,8 @@ io.on('connection', socket => {
     if (socket.room && msg.text) {
       const chatMsg = {
         id: msg.id || crypto.randomUUID(),
-        senderId: socket.id,       // <-- الهوية الفريدة للمرسل
-        senderName: socket.userName, // الاسم (للعرض فقط)
+        senderId: socket.id,       // <-- التعديل الأهم: الهوية الفريدة للمرسل
+        senderName: socket.userName, 
         text: msg.text,
         time: new Date().toISOString(),
         reactions: {}
@@ -116,7 +116,7 @@ io.on('connection', socket => {
     if (socket.room && data.url) {
       const chatMsg = {
         id: data.id || crypto.randomUUID(),
-        senderId: socket.id,       // <-- الهوية الفريدة للمرسل
+        senderId: socket.id,       // <-- التعديل الأهم
         senderName: socket.userName,
         url: data.url,
         duration: data.duration,
@@ -133,7 +133,7 @@ io.on('connection', socket => {
     io.to(socket.room).emit('newReaction', { 
       messageId: data.messageId, 
       reaction: data.reaction, 
-      senderId: socket.id,      // <-- الهوية الفريدة
+      senderId: socket.id,      // <-- التعديل الأهم
       senderName: socket.userName 
     });
   });
