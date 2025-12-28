@@ -5,12 +5,10 @@ const crypto = require('crypto');
 const multer = require('multer');
 
 const app = express();
-
 app.set('trust proxy', true);
 
 const server = http.createServer(app);
 
-const sessions = new Map();
 let waitingUser = null;
 let connectedUsers = 0;
 const messages = [];
@@ -23,7 +21,6 @@ const corsOptions = {
   credentials: true
 };
 
-// Middleware للتعامل مع CORS
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', allowedOrigin);
   res.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
@@ -41,33 +38,35 @@ const storage = multer.diskStorage({
     cb(null, crypto.randomUUID() + '.webm');
   }
 });
-
 const upload = multer({ storage });
 
 app.post('/upload-voice', upload.single('voice'), (req, res) => {
-  const fileUrl = `https://${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+  const fileUrl = `https://${req.get('host')}/uploads/${req.file.filename}`;
   res.json({ url: fileUrl });
 });
-
 app.use('/uploads', express.static('uploads'));
 
-// إنشاء توكن للمستخدم
+// إنشاء توكن للمستخدم مع التحقق من الاسم المتصل حالياً
 app.post('/start-chat', (req, res) => {
   const { name } = req.body;
   if (!name || typeof name !== 'string' || name.trim().length < 3 || name.trim().length > 20) {
     return res.status(400).json({ error: 'Invalid name' });
   }
+  const trimmedName = name.trim().toLowerCase();
 
-  const trimmedName = name.trim();
+  // تحقق من الأسماء المتصلة حالياً عبر Sockets
+  const connectedNames = Array.from(io.sockets.sockets.values())
+    .map(s => s.userName?.toLowerCase())
+    .filter(Boolean);
 
-  // تحقق إذا الاسم موجود بالفعل في الجلسات
-  const nameTaken = Array.from(sessions.values()).some(existingName => existingName.toLowerCase() === trimmedName.toLowerCase());
-  if (nameTaken) {
-    return res.status(400).json({ error: 'NAME_TAKEN', message: 'This name is already taken. Please choose another one.' });
+  if (connectedNames.includes(trimmedName)) {
+    return res.status(400).json({
+      error: 'NAME_TAKEN',
+      message: 'This name is already in use by an online user. Please choose another one.'
+    });
   }
 
   const token = crypto.randomUUID();
-  sessions.set(token, trimmedName);
   res.json({ token });
 });
 
@@ -75,10 +74,7 @@ app.post('/start-chat', (req, res) => {
 const io = new Server(server, { cors: corsOptions });
 
 function decreaseUserCount(socket) {
-  if (waitingUser && waitingUser.id === socket.id) {
-    waitingUser = null;
-  }
-
+  if (waitingUser && waitingUser.id === socket.id) waitingUser = null;
   if (socket.counted) {
     connectedUsers--;
     socket.counted = false;
@@ -88,20 +84,24 @@ function decreaseUserCount(socket) {
 
 io.on('connection', socket => {
   console.log('User connected:', socket.id);
-
-  // لا تزيد connectedUsers هنا
   socket.emit('user_count', connectedUsers);
 
-  socket.on('join', async token => {
-    const name = sessions.get(token);
+  socket.on('join', token => {
+    // هنا الاسم سيأتي من الكلاينت عند توكن
+    const name = token?.trim();
     if (!name) { socket.emit('error', 'Invalid token'); return socket.disconnect(); }
 
-    socket.userId = socket.id;
-    socket.userName = name;
-    sessions.delete(token);
+    // تحقق مرة أخرى قبل الانضمام (لضمان عدم وجود تزامن)
+    const connectedNames = Array.from(io.sockets.sockets.values())
+      .map(s => s.userName?.toLowerCase())
+      .filter(Boolean);
+    if (connectedNames.includes(name.toLowerCase())) {
+      socket.emit('error', 'NAME_TAKEN');
+      return socket.disconnect();
+    }
 
-    // فقط عند انضمام المستخدم الفعلي
-    socket.counted = true; // فلاغ جديد
+    socket.userName = name;
+    socket.counted = true;
     connectedUsers++;
     io.emit('user_count', connectedUsers);
 
@@ -158,57 +158,31 @@ io.on('connection', socket => {
 
     if (!msg.reactions) msg.reactions = {};
     if (!msg.reactions[reaction]) msg.reactions[reaction] = [];
-
     const idx = msg.reactions[reaction].indexOf(sender);
-
-    if (idx === -1) {
-      msg.reactions[reaction].push(sender);
-    } else {
+    if (idx === -1) msg.reactions[reaction].push(sender);
+    else {
       msg.reactions[reaction].splice(idx, 1);
-      if (msg.reactions[reaction].length === 0) {
-        delete msg.reactions[reaction];
-      }
+      if (msg.reactions[reaction].length === 0) delete msg.reactions[reaction];
     }
-
-    io.to(socket.room).emit('newReaction', {
-      messageId,
-      reactions: msg.reactions
-    });
+    io.to(socket.room).emit('newReaction', { messageId, reactions: msg.reactions });
   });
 
-  socket.on('typing', () => {
-    if (socket.room) socket.to(socket.room).emit('typing');
-  });
+  socket.on('typing', () => { if (socket.room) socket.to(socket.room).emit('typing'); });
+  socket.on('startRecording', () => { if (socket.room) socket.to(socket.room).emit('partnerRecording', true); });
+  socket.on('stopRecording', () => { if (socket.room) socket.to(socket.room).emit('partnerRecording', false); });
 
-  socket.on('startRecording', () => {
-    if (!socket.room) return;
-
-    socket.to(socket.room).emit('partnerRecording', true);
-  });
-
-  socket.on('stopRecording', () => {
-    if (!socket.room) return;
-
-    socket.to(socket.room).emit('partnerRecording', false);
-  });
-
-  socket.on('leave', async () => {
+  socket.on('leave', () => {
     if (socket.room) {
       socket.to(socket.room).emit('partner_left');
       socket.leave(socket.room);
       socket.room = null;
     }
-
     decreaseUserCount(socket);
   });
 
-  socket.on('disconnect', async () => {
+  socket.on('disconnect', () => {
     if (waitingUser && waitingUser.id === socket.id) waitingUser = null;
-    if (socket.room) {
-      const room = socket.room;
-      socket.to(room).emit('partner_left');
-    }
-
+    if (socket.room) socket.to(socket.room).emit('partner_left');
     decreaseUserCount(socket);
   });
 });
