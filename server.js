@@ -64,6 +64,15 @@ app.post('/start-chat', (req, res) => {
   res.json({ token })
 });
 
+app.post('/check-device', (req, res) => {
+  const { deviceId } = req.body;
+  if (!deviceId) return res.status(400).json({ error: 'No deviceId' });
+
+  const exists = Array.from(sessions.values()).some(session => session.deviceId === deviceId);
+  res.json({ exists });
+});
+
+
 // إعداد Socket.IO
 const io = new Server(server, { cors: corsOptions });
 
