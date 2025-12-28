@@ -57,10 +57,20 @@ app.post('/start-chat', (req, res) => {
   if (!name || typeof name !== 'string' || name.trim().length < 3 || name.trim().length > 20) {
     return res.status(400).json({ error: 'Invalid name' });
   }
+
+  const trimmedName = name.trim();
+
+  // تحقق إذا الاسم موجود بالفعل في الجلسات
+  const nameTaken = Array.from(sessions.values()).some(existingName => existingName.toLowerCase() === trimmedName.toLowerCase());
+  if (nameTaken) {
+    return res.status(400).json({ error: 'NAME_TAKEN', message: 'This name is already taken. Please choose another one.' });
+  }
+
   const token = crypto.randomUUID();
-  sessions.set(token, name.trim());
+  sessions.set(token, trimmedName);
   res.json({ token });
 });
+
 
 // إعداد Socket.IO
 const io = new Server(server, { cors: corsOptions });
