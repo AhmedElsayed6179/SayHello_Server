@@ -5,6 +5,9 @@ const crypto = require('crypto');
 const multer = require('multer');
 
 const app = express();
+
+app.set('trust proxy', true);
+
 const server = http.createServer(app);
 
 const sessions = new Map();
@@ -42,7 +45,7 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 app.post('/upload-voice', upload.single('voice'), (req, res) => {
-  const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+  const fileUrl = `https://${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
   res.json({ url: fileUrl });
 });
 
