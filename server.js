@@ -109,7 +109,12 @@ io.on('connection', socket => {
   });
 
   socket.on('sendMessage', msg => {
-    if (socket.room && msg.id && msg.text) {
+    if (!socket.room) {
+      socket.emit('error', 'No partner connected yet.');
+      return;
+    }
+
+    if (msg.id && msg.text) {
       const chatMsg = {
         id: msg.id,
         senderId: socket.userId,
@@ -124,7 +129,11 @@ io.on('connection', socket => {
   });
 
   socket.on('sendVoice', data => {
-    if (socket.room && data.id) {
+    if (!socket.room) {
+      socket.emit('error', 'No partner connected yet.');
+      return;
+    }
+    if (data.id) {
       const chatMsg = {
         id: data.id,
         senderId: socket.userId,
