@@ -3,6 +3,8 @@ const http = require('http');
 const { Server } = require('socket.io');
 const crypto = require('crypto');
 const multer = require('multer');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
 
@@ -35,19 +37,44 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
+// إعداد multer لتخزين الملفات
 const storage = multer.diskStorage({
   destination: 'uploads/',
   filename: (req, file, cb) => {
     cb(null, crypto.randomUUID() + '.webm');
   }
 });
-
 const upload = multer({ storage });
 
+// خريطة لتخزين الملفات حسب الغرفة
+const roomFiles = new Map();
+
+// رفع الصوت
 app.post('/upload-voice', upload.single('voice'), (req, res) => {
-const fileUrl = `https://${req.get('host')}/uploads/${req.file.filename}`;
+  const room = req.body.room; // يجب إرسال room مع الفورم
+  if (!room) return res.status(400).json({ error: 'Room is required' });
+
+  const filePath = path.join('uploads', req.file.filename);
+  if (!roomFiles.has(room)) roomFiles.set(room, []);
+  roomFiles.get(room).push(filePath);
+
+  const fileUrl = `https://${req.get('host')}/uploads/${req.file.filename}`;
   res.json({ url: fileUrl });
 });
+
+// مسح ملفات الغرفة عند انتهاء الشات
+function clearRoomFiles(room) {
+  const files = roomFiles.get(room);
+  if (!files) return;
+
+  files.forEach(file => {
+    fs.unlink(file, err => {
+      if (err) console.error('Failed to delete file', file, err);
+    });
+  });
+
+  roomFiles.delete(room);
+}
 
 app.use('/uploads', express.static('uploads'));
 
@@ -188,6 +215,7 @@ io.on('connection', socket => {
       socket.to(socket.room).emit('partner_left');
       socket.leave(socket.room);
       socket.room = null;
+      clearRoomFiles(socket.room);
     }
 
     decreaseUserCount(socket);
@@ -198,6 +226,7 @@ io.on('connection', socket => {
     if (socket.room) {
       const room = socket.room;
       socket.to(room).emit('partner_left');
+      clearRoomFiles(socket.room);
     }
 
     decreaseUserCount(socket);
