@@ -62,6 +62,8 @@ app.post('/upload-voice', upload.single('voice'), (req, res) => {
   res.json({ url: fileUrl });
 });
 
+const roomMessages = new Map;
+
 // مسح ملفات الغرفة عند انتهاء الشات
 function clearRoomFiles(room) {
   const files = roomFiles.get(room);
@@ -74,6 +76,11 @@ function clearRoomFiles(room) {
   });
 
   roomFiles.delete(room);
+
+  // مسح الرسائل النصية
+  if (roomMessages.has(room)) {
+    roomMessages.delete(room);
+  }
 }
 
 app.use('/uploads', express.static('uploads'));
@@ -212,10 +219,15 @@ io.on('connection', socket => {
 
   socket.on('leave', async () => {
     if (socket.room) {
+      const room = socket.room;
       socket.to(socket.room).emit('partner_left');
       socket.leave(socket.room);
       socket.room = null;
-      clearRoomFiles(socket.room);
+      const roomSize = io.sockets.adapter.rooms.get(room)?.size || 0;
+
+      if (roomSize === 0) {
+        clearRoomFiles(room); // ✅ آخر مستخدم خرج
+      }
     }
 
     decreaseUserCount(socket);
@@ -226,7 +238,11 @@ io.on('connection', socket => {
     if (socket.room) {
       const room = socket.room;
       socket.to(room).emit('partner_left');
-      clearRoomFiles(socket.room);
+      const roomSize = io.sockets.adapter.rooms.get(room)?.size || 0;
+
+      if (roomSize === 0) {
+        clearRoomFiles(room); // ✅ آخر مستخدم خرج
+      }
     }
 
     decreaseUserCount(socket);
