@@ -18,7 +18,7 @@ let connectedUsers = 0;
 const messages = [];
 
 // إعدادات CORS
-const allowedOrigin = 'https://sayhello-production-988b.up.railway.app';
+const allowedOrigin = 'https://sayhello-production-f911.up.railway.app';
 const corsOptions = {
   origin: allowedOrigin,
   methods: ['GET', 'POST', 'OPTIONS'],
@@ -249,4 +249,5 @@ io.on('connection', socket => {
   });
 });
 
-module.exports = server;
+const PORT = process.env.PORT || 8080;
+server.listen(PORT, () => console.log('Server running on port', PORT));
