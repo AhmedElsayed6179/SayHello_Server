@@ -25,12 +25,17 @@ const corsOptions = {
 };
 
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', allowedOrigin);
-  res.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  if (req.method === 'OPTIONS') return res.sendStatus(200);
-  next();
+  const origin = req.headers.origin;
+  if (origin && origin === allowedOrigin) {
+    res.header('Access-Control-Allow-Origin', allowedOrigin);
+    res.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    if (req.method === 'OPTIONS') return res.sendStatus(200);
+    next();
+  } else {
+    res.status(403).send('Not allowed');
+  }
 });
 
 app.use(express.json());
@@ -46,7 +51,7 @@ const upload = multer({ storage });
 const roomFiles = new Map();
 
 app.post('/upload-voice', upload.single('voice'), (req, res) => {
-  const room = req.body.room; // يجب إرسال room مع الفورم
+  const room = req.body.room;
   if (!room) return res.status(400).json({ error: 'Room is required' });
 
   const filePath = path.join('uploads', req.file.filename);
@@ -88,7 +93,13 @@ app.post('/start-chat', (req, res) => {
   res.json({ token });
 });
 
-const io = new Server(server, { cors: corsOptions });
+const io = new Server(server, {
+  cors: {
+    origin: allowedOrigin,
+    methods: ['GET', 'POST', 'OPTIONS'],
+    credentials: true
+  }
+});
 
 function decreaseUserCount(socket) {
   if (waitingUser && waitingUser.id === socket.id) {
@@ -103,7 +114,12 @@ function decreaseUserCount(socket) {
 }
 
 io.on('connection', socket => {
-  console.log('User connected:', socket.id);
+
+  const origin = socket.handshake.headers.origin;
+  if (origin !== allowedOrigin) {
+    socket.disconnect(true);
+    return;
+  }
 
   socket.emit('user_count', connectedUsers);
 
