@@ -17,15 +17,13 @@ let waitingUser = null;
 let connectedUsers = 0;
 const messages = [];
 
-// إعدادات CORS
-const allowedOrigin = 'https://sayhello-production-f911.up.railway.app';
+const allowedOrigin = 'https://sayhello.up.railway.app/';
 const corsOptions = {
   origin: allowedOrigin,
   methods: ['GET', 'POST', 'OPTIONS'],
   credentials: true
 };
 
-// Middleware للتعامل مع CORS
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', allowedOrigin);
   res.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
@@ -37,7 +35,6 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
-// إعداد multer لتخزين الملفات
 const storage = multer.diskStorage({
   destination: 'uploads/',
   filename: (req, file, cb) => {
@@ -46,10 +43,8 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// خريطة لتخزين الملفات حسب الغرفة
 const roomFiles = new Map();
 
-// رفع الصوت
 app.post('/upload-voice', upload.single('voice'), (req, res) => {
   const room = req.body.room; // يجب إرسال room مع الفورم
   if (!room) return res.status(400).json({ error: 'Room is required' });
@@ -64,7 +59,6 @@ app.post('/upload-voice', upload.single('voice'), (req, res) => {
 
 const roomMessages = new Map;
 
-// مسح ملفات الغرفة عند انتهاء الشات
 function clearRoomFiles(room) {
   const files = roomFiles.get(room);
   if (!files) return;
@@ -77,7 +71,6 @@ function clearRoomFiles(room) {
 
   roomFiles.delete(room);
 
-  // مسح الرسائل النصية
   if (roomMessages.has(room)) {
     roomMessages.delete(room);
   }
@@ -85,7 +78,6 @@ function clearRoomFiles(room) {
 
 app.use('/uploads', express.static('uploads'));
 
-// إنشاء توكن للمستخدم
 app.post('/start-chat', (req, res) => {
   const { name } = req.body;
   if (!name || typeof name !== 'string' || name.trim().length < 3 || name.trim().length > 20) {
@@ -96,7 +88,6 @@ app.post('/start-chat', (req, res) => {
   res.json({ token });
 });
 
-// إعداد Socket.IO
 const io = new Server(server, { cors: corsOptions });
 
 function decreaseUserCount(socket) {
@@ -114,7 +105,6 @@ function decreaseUserCount(socket) {
 io.on('connection', socket => {
   console.log('User connected:', socket.id);
 
-  // لا تزيد connectedUsers هنا
   socket.emit('user_count', connectedUsers);
 
   socket.on('join', async token => {
@@ -125,12 +115,10 @@ io.on('connection', socket => {
     socket.userName = name;
     sessions.delete(token);
 
-    // فقط عند انضمام المستخدم الفعلي
-    socket.counted = true; // فلاغ جديد
+    socket.counted = true;
     connectedUsers++;
     io.emit('user_count', connectedUsers);
 
-    // غرف الدردشة الثنائية
     if (waitingUser && waitingUser.id !== socket.id) {
       const room = `room-${socket.id}-${waitingUser.id}`;
       socket.join(room);
@@ -226,7 +214,7 @@ io.on('connection', socket => {
       const roomSize = io.sockets.adapter.rooms.get(room)?.size || 0;
 
       if (roomSize === 0) {
-        clearRoomFiles(room); // ✅ آخر مستخدم خرج
+        clearRoomFiles(room);
       }
     }
 
@@ -241,7 +229,7 @@ io.on('connection', socket => {
       const roomSize = io.sockets.adapter.rooms.get(room)?.size || 0;
 
       if (roomSize === 0) {
-        clearRoomFiles(room); // ✅ آخر مستخدم خرج
+        clearRoomFiles(room);
       }
     }
 
