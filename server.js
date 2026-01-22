@@ -17,7 +17,7 @@ let waitingUser = null;
 let connectedUsers = 0;
 const messages = [];
 
-const allowedOrigin = 'https://sayhello.up.railway.app/';
+const allowedOrigin = 'https://sayhello.up.railway.app';
 const corsOptions = {
   origin: allowedOrigin,
   methods: ['GET', 'POST', 'OPTIONS'],
