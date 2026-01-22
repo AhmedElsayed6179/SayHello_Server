@@ -57,7 +57,7 @@ app.post('/upload-voice', upload.single('voice'), (req, res) => {
   res.json({ url: fileUrl });
 });
 
-const roomMessages = new Map;
+const roomMessages = new Map();
 
 function clearRoomFiles(room) {
   const files = roomFiles.get(room);
