@@ -1,5 +1,3 @@
-const express = require('express');
-const http = require('http');
 const { Server } = require('socket.io');
 const crypto = require('crypto');
 const multer = require('multer');
@@ -18,19 +16,19 @@ let connectedUsers = 0;
 const messages = [];
 
 const allowedOrigin = 'https://sayhello.up.railway.app';
+const corsOptions = {
+  origin: allowedOrigin,
+  methods: ['GET', 'POST', 'OPTIONS'],
+  credentials: true
+};
 
 app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  if (origin && origin === allowedOrigin) {
-    res.header('Access-Control-Allow-Origin', allowedOrigin);
-    res.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type');
-    res.header('Access-Control-Allow-Credentials', 'true');
-    if (req.method === 'OPTIONS') return res.sendStatus(200);
-    next();
-  } else {
-    res.status(403).send('Not allowed');
-  }
+  res.header('Access-Control-Allow-Origin', allowedOrigin);
+  res.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
+  next();
 });
 
 app.use(express.json());
@@ -57,7 +55,7 @@ app.post('/upload-voice', upload.single('voice'), (req, res) => {
   res.json({ url: fileUrl });
 });
 
-const roomMessages = new Map();
+const roomMessages = new Map;
 
 function clearRoomFiles(room) {
   const files = roomFiles.get(room);
@@ -88,13 +86,7 @@ app.post('/start-chat', (req, res) => {
   res.json({ token });
 });
 
-const io = new Server(server, {
-  cors: {
-    origin: allowedOrigin,
-    methods: ['GET', 'POST', 'OPTIONS'],
-    credentials: true
-  }
-});
+const io = new Server(server, { cors: corsOptions });
 
 function decreaseUserCount(socket) {
   if (waitingUser && waitingUser.id === socket.id) {
@@ -109,13 +101,12 @@ function decreaseUserCount(socket) {
 }
 
 io.on('connection', socket => {
-
   const origin = socket.handshake.headers.origin;
   if (origin !== allowedOrigin) {
     socket.disconnect(true);
     return;
   }
-
+  
   socket.emit('user_count', connectedUsers);
 
   socket.on('join', async token => {
