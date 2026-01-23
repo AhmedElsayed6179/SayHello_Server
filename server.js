@@ -1,3 +1,5 @@
+const express = require('express');
+const http = require('http');
 const { Server } = require('socket.io');
 const crypto = require('crypto');
 const multer = require('multer');
@@ -43,6 +45,7 @@ const upload = multer({ storage });
 
 const roomFiles = new Map();
 
+// رفع الصوت
 app.post('/upload-voice', upload.single('voice'), (req, res) => {
   const room = req.body.room;
   if (!room) return res.status(400).json({ error: 'Room is required' });
@@ -55,7 +58,7 @@ app.post('/upload-voice', upload.single('voice'), (req, res) => {
   res.json({ url: fileUrl });
 });
 
-const roomMessages = new Map;
+const roomMessages = new Map();
 
 function clearRoomFiles(room) {
   const files = roomFiles.get(room);
@@ -101,6 +104,7 @@ function decreaseUserCount(socket) {
 }
 
 io.on('connection', socket => {
+  console.log('User connected:', socket.id);
 
   socket.emit('user_count', connectedUsers);
 
@@ -112,7 +116,7 @@ io.on('connection', socket => {
     socket.userName = name;
     sessions.delete(token);
 
-    socket.counted = true;
+    socket.counted = true; // فلاغ جديد
     connectedUsers++;
     io.emit('user_count', connectedUsers);
 
