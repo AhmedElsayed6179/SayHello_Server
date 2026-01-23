@@ -101,12 +101,7 @@ function decreaseUserCount(socket) {
 }
 
 io.on('connection', socket => {
-  const origin = socket.handshake.headers.origin;
-  if (origin !== allowedOrigin) {
-    socket.disconnect(true);
-    return;
-  }
-  
+
   socket.emit('user_count', connectedUsers);
 
   socket.on('join', async token => {
