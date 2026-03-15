@@ -81,7 +81,7 @@ app.use('/uploads', express.static('uploads'));
 
 app.post('/start-chat', (req, res) => {
   const { name } = req.body;
-  if (!name || typeof name !== 'string' || name.trim().length < 3 || name.trim().length > 20) {
+  if (!name || typeof name !== 'string' || name.trim().length < 3 || name.trim().length > 50) {
     return res.status(400).json({ error: 'Invalid name' });
   }
   const token = crypto.randomUUID();
@@ -116,7 +116,7 @@ io.on('connection', socket => {
     socket.userName = name;
     sessions.delete(token);
 
-    socket.counted = true; // فلاغ جديد
+    socket.counted = true;
     connectedUsers++;
     io.emit('user_count', connectedUsers);
 
@@ -134,6 +134,7 @@ io.on('connection', socket => {
     }
   });
 
+  // ─── Text Chat ─────────────────────────────────────────────────────
   socket.on('sendMessage', msg => {
     if (socket.room && msg.id && msg.text) {
       const chatMsg = {
@@ -196,16 +197,31 @@ io.on('connection', socket => {
 
   socket.on('startRecording', () => {
     if (!socket.room) return;
-
     socket.to(socket.room).emit('partnerRecording', true);
   });
 
   socket.on('stopRecording', () => {
     if (!socket.room) return;
-
     socket.to(socket.room).emit('partnerRecording', false);
   });
 
+  // ─── WebRTC Signaling ──────────────────────────────────────────────
+  socket.on('webrtc-offer', data => {
+    if (!socket.room) return;
+    socket.to(socket.room).emit('webrtc-offer', data);
+  });
+
+  socket.on('webrtc-answer', data => {
+    if (!socket.room) return;
+    socket.to(socket.room).emit('webrtc-answer', data);
+  });
+
+  socket.on('webrtc-ice', data => {
+    if (!socket.room) return;
+    socket.to(socket.room).emit('webrtc-ice', data);
+  });
+
+  // ─── Leave / Disconnect ────────────────────────────────────────────
   socket.on('leave', async () => {
     if (socket.room) {
       const room = socket.room;
