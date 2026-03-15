@@ -89,6 +89,38 @@ app.post('/start-chat', (req, res) => {
   res.json({ token });
 });
 
+app.get('/ice-servers', (req, res) => {
+  res.json({
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' },
+      { urls: 'stun:stun3.l.google.com:19302' },
+      { urls: 'stun:stun4.l.google.com:19302' },
+      {
+        urls: 'turn:a.relay.metered.ca:80',
+        username: 'e5f5de9c3adb21e86b4b9d6e',
+        credential: 'uCJkdJPfI0BSXY+t'
+      },
+      {
+        urls: 'turn:a.relay.metered.ca:80?transport=tcp',
+        username: 'e5f5de9c3adb21e86b4b9d6e',
+        credential: 'uCJkdJPfI0BSXY+t'
+      },
+      {
+        urls: 'turn:a.relay.metered.ca:443',
+        username: 'e5f5de9c3adb21e86b4b9d6e',
+        credential: 'uCJkdJPfI0BSXY+t'
+      },
+      {
+        urls: 'turn:a.relay.metered.ca:443?transport=tcp',
+        username: 'e5f5de9c3adb21e86b4b9d6e',
+        credential: 'uCJkdJPfI0BSXY+t'
+      }
+    ]
+  });
+});
+
 const io = new Server(server, { cors: corsOptions });
 
 function decreaseUserCount(socket) {
