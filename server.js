@@ -15,7 +15,10 @@ const server = http.createServer(app);
 const sessions = new Map();
 let waitingUser = null;
 let connectedUsers = 0;
-const messages = [];
+
+// Per-room messages (cleaned up when room closes)
+const roomMessages = new Map();   // roomId → ChatMessage[]
+const roomFiles = new Map();      // roomId → filePath[]
 
 const allowedOrigin = 'https://sayhello.up.railway.app';
 const corsOptions = {
@@ -35,6 +38,20 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
+// ── ICE Servers endpoint ──────────────────────────────────────────────────
+// Returns STUN + optional TURN servers. Add TURN credentials here when available.
+app.get('/ice-servers', (req, res) => {
+  res.json({
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun.cloudflare.com:3478' },
+      // TURN server example (add real credentials for production):
+      // { urls: 'turn:your.turn.server:3478', username: 'user', credential: 'pass' }
+    ]
+  });
+});
+
 const storage = multer.diskStorage({
   destination: 'uploads/',
   filename: (req, file, cb) => {
@@ -42,8 +59,6 @@ const storage = multer.diskStorage({
   }
 });
 const upload = multer({ storage });
-
-const roomFiles = new Map();
 
 // رفع الصوت
 app.post('/upload-voice', upload.single('voice'), (req, res) => {
@@ -58,23 +73,19 @@ app.post('/upload-voice', upload.single('voice'), (req, res) => {
   res.json({ url: fileUrl });
 });
 
-const roomMessages = new Map();
-
-function clearRoomFiles(room) {
+function clearRoomData(room) {
+  // Delete voice files
   const files = roomFiles.get(room);
-  if (!files) return;
-
-  files.forEach(file => {
-    fs.unlink(file, err => {
-      if (err) console.error('Failed to delete file', file, err);
+  if (files) {
+    files.forEach(file => {
+      fs.unlink(file, err => {
+        if (err) console.error('Failed to delete file', file, err);
+      });
     });
-  });
-
-  roomFiles.delete(room);
-
-  if (roomMessages.has(room)) {
-    roomMessages.delete(room);
+    roomFiles.delete(room);
   }
+  // Clear messages
+  roomMessages.delete(room);
 }
 
 app.use('/uploads', express.static('uploads'));
@@ -126,7 +137,7 @@ io.on('connection', socket => {
       waitingUser.join(room);
       socket.room = room;
       waitingUser.room = room;
-      // ✅ الـ initiator هو الـ waitingUser (الأول)، الـ answerer هو الجديد
+      // waitingUser = initiator (first), new socket = answerer
       waitingUser.emit('connected', { role: 'initiator' });
       socket.emit('connected', { role: 'answerer' });
       waitingUser = null;
@@ -146,7 +157,8 @@ io.on('connection', socket => {
         time: new Date().toISOString(),
         reactions: {}
       };
-      messages.push(chatMsg);
+      if (!roomMessages.has(socket.room)) roomMessages.set(socket.room, []);
+      roomMessages.get(socket.room).push(chatMsg);
       io.to(socket.room).emit('newMessage', chatMsg);
     }
   });
@@ -161,8 +173,8 @@ io.on('connection', socket => {
         time: new Date().toISOString(),
         reactions: {}
       };
-      messages.push(chatMsg);
-      // Broadcast to whole room (sender gets it too for status upgrade)
+      if (!roomMessages.has(socket.room)) roomMessages.set(socket.room, []);
+      roomMessages.get(socket.room).push(chatMsg);
       io.to(socket.room).emit('newVoice', chatMsg);
     }
   });
@@ -171,7 +183,8 @@ io.on('connection', socket => {
     if (!socket.room || !data.messageId) return;
 
     const { messageId, reaction, sender } = data;
-    const msg = messages.find(m => m.id === messageId);
+    const msgs = roomMessages.get(socket.room) || [];
+    const msg = msgs.find(m => m.id === messageId);
     if (!msg) return;
 
     if (!msg.reactions) msg.reactions = {};
@@ -224,7 +237,6 @@ io.on('connection', socket => {
     socket.to(socket.room).emit('webrtc-ice', data);
   });
 
-
   // ─── Message Seen ──────────────────────────────────────────────────
   socket.on('messageSeen', data => {
     if (!socket.room || !data.messageId) return;
@@ -239,12 +251,8 @@ io.on('connection', socket => {
       socket.leave(socket.room);
       socket.room = null;
       const roomSize = io.sockets.adapter.rooms.get(room)?.size || 0;
-
-      if (roomSize === 0) {
-        clearRoomFiles(room);
-      }
+      if (roomSize === 0) clearRoomData(room);
     }
-
     decreaseUserCount(socket);
   });
 
@@ -254,12 +262,8 @@ io.on('connection', socket => {
       const room = socket.room;
       socket.to(room).emit('partner_left');
       const roomSize = io.sockets.adapter.rooms.get(room)?.size || 0;
-
-      if (roomSize === 0) {
-        clearRoomFiles(room);
-      }
+      if (roomSize === 0) clearRoomData(room);
     }
-
     decreaseUserCount(socket);
   });
 });
