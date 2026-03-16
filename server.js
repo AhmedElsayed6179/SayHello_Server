@@ -223,6 +223,13 @@ io.on('connection', socket => {
     socket.to(socket.room).emit('webrtc-ice', data);
   });
 
+
+  // ─── Message Seen ──────────────────────────────────────────────────
+  socket.on('messageSeen', data => {
+    if (!socket.room || !data.messageId) return;
+    socket.to(socket.room).emit('messageSeen', { messageId: data.messageId });
+  });
+
   // ─── Leave / Disconnect ────────────────────────────────────────────
   socket.on('leave', async () => {
     if (socket.room) {
