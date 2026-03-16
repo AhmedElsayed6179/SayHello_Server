@@ -162,6 +162,7 @@ io.on('connection', socket => {
         reactions: {}
       };
       messages.push(chatMsg);
+      // Broadcast to whole room (sender gets it too for status upgrade)
       io.to(socket.room).emit('newVoice', chatMsg);
     }
   });
